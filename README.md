@@ -1,69 +1,33 @@
-# Telegram Mini-App для управления дедлайнами студентов
+# Student Deadline Manager - Telegram Mini-App
 
-Это Telegram Mini-App, разработанное для помощи студентам в управлении своими задачами и дедлайнами. Оно имеет интерфейс календаря, где пользователи могут отмечать дедлайны для различных задач.
+A modern Telegram Mini-App designed to help students manage their tasks and deadlines efficiently. Features a clean UI with Tasks, Calendar, and Profile screens.
 
-## Функции
+## Features
 
-- Вид календаря для дедлайнов с drag-and-drop переносом задач
-- Добавление, редактирование и удаление задач с дедлайнами
-- Категории задач (Учеба, Работа, Личное, Другое)
-- Приоритеты (Высокий, Средний, Низкий) с цветовой индикацией
-- Отметка выполненных задач
-- Темная/светлая тема
-- Поиск задач по всему календарю
-- Экспорт и импорт данных (JSON)
-- Фильтры по категориям и статусу
-- Статистика: общее количество задач, выполненные, просроченные
-- Напоминания через Telegram alerts
-- Современный, responsive UI с анимациями
-- Данные хранятся локально, привязаны к Telegram user ID
-- Интеграция с Telegram Web App
+- **Tasks Screen:** Today's Deadline and Upcoming tasks in card format.
+- **Calendar Screen:** Monthly calendar view with task indicators.
+- **Profile Screen:** Task statistics.
+- **Bottom Navigation:** Switch between screens.
+- **Add Tasks:** Modal with date, category, priority selection.
+- **Checkboxes:** Mark tasks as completed.
+- **Themes:** Light/Dark mode.
+- **Sync:** Data stored in MongoDB, tied to Telegram user ID.
+- **Telegram Web App Integration**
 
-## Начало работы
+## UI Screenshots
+- Main Screen: "Tasks" header, floating + button, task cards with checkboxes.
+- Today's Deadline: Cards for today's tasks.
+- Upcoming: List of upcoming tasks with dates.
+- Navigation: Tasks, Calendar, Profile at bottom.
 
-1. Клонируйте репозиторий
-2. Запустите `npm install` для установки зависимостей
-3. Запустите `npm run dev` для запуска сервера разработки
-4. Откройте приложение в браузере или интегрируйте с Telegram
+## Technologies
+- Frontend: Vite + Vanilla JS
+- Backend: Node.js + Express + MongoDB
+- Hosting: Vercel (frontend), Render (backend)
 
-## Технологии
-
-- HTML
-- CSS
-- JavaScript
-- Vite
-
-## Как использовать
-
-- Нажмите на дату в календаре, чтобы просмотреть или добавить задачи на этот день.
-- В модальном окне добавляйте новые задачи, редактируйте существующие или удаляйте их.
-- Отмечайте чекбоксами выполненные задачи.
-- Задачи сохраняются локально в вашем браузере.
-
-## Интеграция с Telegram
-
-Чтобы интегрировать как Telegram Mini-App:
-1. Соберите приложение: `npm run build`
-2. Загрузите папку `dist` на хостинг (например, Vercel, Netlify)
-3. В настройках вашего Telegram бота укажите URL Mini-App
-4. Пользователи смогут открывать приложение через бота
-
-Для тестирования в Telegram используйте @BotFather для создания бота и настройки Mini-App.
-
-## Настройка Backend
-
-1. Установите MongoDB локально или используйте облачный сервис (MongoDB Atlas).
-2. В папке `backend` выполните `npm install`.
-3. Создайте `.env` файл с вашими настройками (см. `.env.example`).
-4. Запустите сервер: `npm run dev`.
-5. Для бота: настройте Telegram Bot через @BotFather и добавьте токен в `.env`.
-
-## Архитектура
-
-- **Frontend**: Vite + Vanilla JS
-- **Backend**: Node.js + Express + MongoDB
-- **Интеграция**: Telegram Web App API для user ID, Bot API для напоминаний
-
-## Безопасность
-
-Данные привязаны к Telegram user ID. Используйте HTTPS в продакшене.
+## Setup
+1. Clone repos.
+2. Frontend: `npm install`, `npm run build`.
+3. Backend: `npm install`, set env vars, `npm start`.
+4. Deploy to Vercel/Render.
+5. Configure Telegram bot.
