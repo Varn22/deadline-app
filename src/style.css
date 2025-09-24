@@ -37,20 +37,6 @@ body.dark {
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
 }
 
-body.pixel {
-  --bg-primary: #2c1810;
-  --text-primary: #f4f4f4;
-  --bg-secondary: #4a2c1a;
-  --bg-tertiary: #5d3a26;
-  --accent-primary: #ff6b35;
-  --border-light: #8b5a3c;
-  --shadow-sm: 4px 4px 0px #1a0f08;
-  --shadow-md: 6px 6px 0px #1a0f08;
-  --shadow-lg: 8px 8px 0px #1a0f08;
-  font-family: 'Courier New', monospace;
-  image-rendering: pixelated;
-}
-
 body {
   margin: 0;
   padding: 0;
@@ -335,6 +321,9 @@ body {
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-light);
   animation: modalSlideIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 @keyframes modalSlideIn {

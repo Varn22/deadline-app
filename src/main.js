@@ -333,7 +333,6 @@ function renderProfileView() {
                     <select id="themeToggle">
                         <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>Светлая</option>
                         <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>Тёмная</option>
-                        <option value="pixel" ${currentTheme === 'pixel' ? 'selected' : ''}>3D Пиксели</option>
                     </select>
                 </div>
                 
@@ -490,11 +489,22 @@ function handleAddTask(e) {
 function handleSaveTask(e) {
     if (e.target.id === 'saveTask') {
         const taskInput = document.getElementById('newTask');
-        const date = document.getElementById('taskDate').value;
+        let date = document.getElementById('taskDate').value;
         const category = document.getElementById('taskCategory').value;
         const priority = document.getElementById('taskPriority').value;
+        let taskText = taskInput.value.trim();
 
-        if (!taskInput.value.trim() || !date) return;
+        // Parse date from text if date field is empty
+        if (!date) {
+            const parsedDate = parseDateFromText(taskText);
+            if (parsedDate) {
+                date = parsedDate;
+                // Remove date from task text
+                taskText = taskText.replace(/\s*\d{1,2}\.\d{1,2}\.\d{4}\s*/, '').trim();
+            }
+        }
+
+        if (!taskText || !date) return;
 
         if (e.target.dataset.edit === 'true') {
             const oldDate = e.target.dataset.date;
@@ -504,18 +514,18 @@ function handleSaveTask(e) {
             if (oldDate !== date) {
                 tasks[oldDate].splice(index, 1);
                 if (!tasks[date]) tasks[date] = [];
-                tasks[date].push({ text: taskInput.value.trim(), completed: task.completed, category, priority, starred: task.starred, created: task.created });
+                tasks[date].push({ text: taskText, completed: task.completed, category, priority, starred: task.starred, created: task.created });
                 saveTasks(oldDate);
                 saveTasks(date);
             } else {
-                task.text = taskInput.value.trim();
+                task.text = taskText;
                 task.category = category;
                 task.priority = priority;
                 saveTasks(date);
             }
         } else {
             if (!tasks[date]) tasks[date] = [];
-            tasks[date].push({ text: taskInput.value.trim(), completed: false, category, priority, starred: false, created: new Date().toISOString() });
+            tasks[date].push({ text: taskText, completed: false, category, priority, starred: false, created: new Date().toISOString() });
             saveTasks(date);
         }
 
@@ -667,9 +677,10 @@ function handleImportFile(e) {
                         }
                     }
                     renderApp();
-                    alert('Tasks imported successfully!');
+                    showNotification('✅ Задачи успешно импортированы!', 'success');
                 } catch (error) {
-                    alert('Error importing tasks. Please check the file format.');
+                    console.error('Import error:', error);
+                    showNotification('❌ Ошибка при импорте задач. Проверьте формат файла.', 'error');
                 }
             };
             reader.readAsText(file);
@@ -690,6 +701,17 @@ function getCategoryName(key) {
 // Helpers
 function pad(n) { return n.toString().padStart(2, '0'); }
 function formatDateKey(y, m, d) { return `${y}-${pad(m)}-${pad(d)}`; }
+
+// Parse date from task text
+function parseDateFromText(text) {
+    const dateRegex = /(\d{1,2})\.(\d{1,2})\.(\d{4})/;
+    const match = text.match(dateRegex);
+    if (match) {
+        const [, day, month, year] = match;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return null;
+}
 
 // Initialize
 applyTheme();
