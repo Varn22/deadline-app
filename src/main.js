@@ -156,7 +156,7 @@ function renderTasksView() {
                 <span class="close">&times;</span>
                 <h3>Новая задача</h3>
                 <input type="text" id="newTask" placeholder="Название задачи">
-                <input type="date" id="taskDate" placeholder="Выберите дату">
+                <input type="date" id="taskDate" required>
                 <select id="taskCategory">
                     <option value="study">Учеба</option>
                     <option value="work">Работа</option>

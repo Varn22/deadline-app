@@ -290,7 +290,7 @@ body {
 
 .modal-content input, .modal-content select {
   width: 100%;
-  padding: 12px 16px;
+  padding: 12px;
   margin: 8px 0 16px 0;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -298,13 +298,18 @@ body {
   color: var(--text-color);
   font-size: 1rem;
   transition: border-color 0.2s;
-  box-sizing: border-box;
+  box-sizing: border-box; /* Ensures padding doesn't add to width */
 }
 
-.modal-content input:focus, .modal-content select:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+.modal-content input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--muted-text);
+}
+
+.modal-content input[type="date"]:focus,
+.modal-content input[type="date"]:valid {
+  color: var(--text-color);
 }
 
 .modal-content button {
