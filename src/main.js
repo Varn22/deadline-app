@@ -58,13 +58,16 @@ function renderApp() {
     html += `
         <nav class="bottom-nav">
             <button class="nav-item ${currentView === 'tasks' ? 'active' : ''}" data-view="tasks">
-                📋 Tasks
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Tasks</span>
             </button>
             <button class="nav-item ${currentView === 'calendar' ? 'active' : ''}" data-view="calendar">
-                📅 Calendar
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">Calendar</span>
             </button>
             <button class="nav-item ${currentView === 'profile' ? 'active' : ''}" data-view="profile">
-                👤 Profile
+                <span class="nav-icon">👤</span>
+                <span class="nav-label">Profile</span>
             </button>
         </nav>
     `;
@@ -84,6 +87,8 @@ function renderApp() {
         setupTasksEvents();
     } else if (currentView === 'calendar') {
         setupCalendarEvents();
+    } else if (currentView === 'profile') {
+        setupProfileEvents();
     }
 }
 
@@ -102,23 +107,25 @@ function renderTasksView() {
             <section class="today-deadline">
                 <h2>Today's Deadline</h2>
                 ${todayTasks.length > 0 ? todayTasks.map((task, index) => `
-                    <div class="task-card">
+                    <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
                         <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${today}" data-index="${index}">
                         <div class="task-info">
                             <span class="task-title">${task.text}</span>
+                            <span class="task-category">${task.category || 'other'}</span>
                         </div>
                     </div>
-                `).join('') : '<p>No tasks for today</p>'}
+                `).join('') : '<p style="text-align: center; color: var(--muted-text); padding: 20px;">No tasks for today</p>'}
             </section>
             
             <section class="upcoming">
                 <h2>Upcoming</h2>
                 ${upcomingTasks.map(({date, task, index}) => `
-                    <div class="task-card">
+                    <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
                         <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${date}" data-index="${index}">
                         <div class="task-info">
                             <span class="task-title">${task.text}</span>
-                            <span class="task-date">${new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                            <span class="task-date">${new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                            <span class="task-category">${task.category || 'other'}</span>
                         </div>
                     </div>
                 `).join('')}
@@ -213,6 +220,23 @@ function renderProfileView() {
                 <div>Completed: ${stats.completed}</div>
                 <div>Pending: ${stats.pending}</div>
             </div>
+            
+            <div class="settings">
+                <h3>Settings</h3>
+                <div class="setting-item">
+                    <label for="themeToggle">Theme:</label>
+                    <select id="themeToggle">
+                        <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>Light</option>
+                        <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>Dark</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <button id="exportBtn" class="btn-secondary">Export Tasks</button>
+                    <input type="file" id="importFile" accept=".json" style="display: none;">
+                    <button id="importBtn" class="btn-secondary">Import Tasks</button>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -300,6 +324,66 @@ function setupCalendarEvents() {
             document.getElementById('calendarModal').style.display = 'none';
         }
     });
+}
+
+function setupProfileEvents() {
+    const themeToggle = document.getElementById('themeToggle');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importFile = document.getElementById('importFile');
+
+    if (themeToggle) {
+        themeToggle.addEventListener('change', (e) => {
+            currentTheme = e.target.value;
+            localStorage.setItem('theme', currentTheme);
+            applyTheme();
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            const dataStr = JSON.stringify(tasks, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = 'tasks.json';
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        });
+    }
+
+    if (importBtn) {
+        importBtn.addEventListener('click', () => {
+            importFile.click();
+        });
+    }
+
+    if (importFile) {
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const importedTasks = JSON.parse(e.target.result);
+                        tasks = importedTasks;
+                        localStorage.setItem('tasks', JSON.stringify(tasks));
+                        // Save to backend if user is logged in
+                        if (userId) {
+                            for (const date in tasks) {
+                                await saveTasks(date);
+                            }
+                        }
+                        renderApp();
+                        alert('Tasks imported successfully!');
+                    } catch (error) {
+                        alert('Error importing tasks. Please check the file format.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
 }
 
 function showCalendarTasks(date) {
