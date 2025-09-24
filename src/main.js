@@ -448,3 +448,20 @@ function handleImportFile(e) {
         }
     }
 }
+
+// Initialize
+applyTheme();
+if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.expand();
+    userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
+    if (userId) {
+        loadTasks().then(() => renderApp());
+    } else {
+        tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+        renderApp();
+    }
+} else {
+    tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+    renderApp();
+}
