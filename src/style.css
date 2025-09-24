@@ -390,177 +390,52 @@ body.light input, body.light select, body.light button {
 }
 
 .filters {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.filters label {
-  font-weight: bold;
+@media (max-width: 420px) {
+  .filters { grid-template-columns: 1fr 1fr; }
+  .filters select:last-child { grid-column: span 2; }
 }
 
-.filters select, .filters input {
-  padding: 0.5rem;
+.filters input, .filters select {
+  padding: 10px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--card-bg);
   color: var(--text-color);
 }
 
-.calendar {
+.task-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.progress {
+  height: 6px;
+  background: var(--light-bg);
+  border-radius: 6px;
   overflow: hidden;
-  background: var(--card-bg);
-  box-shadow: var(--shadow);
+  margin: 8px 0 16px 0;
 }
 
-.calendar-header {
-  background: var(--card-bg);
-  color: var(--text-color);
-  padding: 16px;
-  text-align: center;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.calendar-header h2 {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  background: var(--light-bg);
-  font-weight: 500;
-  color: var(--muted-text);
-  border-bottom: 1px solid var(--border-color);
-}
-
-body.dark .weekdays {
-  background: var(--dark-bg);
-}
-
-.weekdays div {
-  padding: 12px;
-  text-align: center;
-  font-size: 0.85rem;
-}
-
-.days {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-}
-
-.day {
-  padding: 12px;
-  text-align: center;
-  cursor: pointer;
-  border: none;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  font-weight: 500;
-}
-
-.day:hover {
-  background: var(--light-bg);
-  transform: scale(1.05);
-}
-
-body.dark .day:hover {
-  background: var(--dark-bg);
-}
-
-.day.has-tasks {
+.progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
   background: var(--primary-color);
-  color: white;
-  font-weight: 600;
-}
-
-.day.today {
-  background: var(--warning-color);
-  color: var(--text-color);
-  font-weight: 600;
-  box-shadow: inset 0 0 0 2px var(--card-bg);
-}
-
-.day.today.has-tasks {
-  background: linear-gradient(45deg, var(--warning-color), var(--primary-color));
-}
-
-#calendarTaskList {
-  list-style: none;
-  padding: 0;
-}
-
-#calendarTaskList li {
-  display: flex;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-#calendarTaskList li input {
-  margin-right: 10px;
-}
-
-.settings {
-  background: var(--card-bg);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: var(--shadow);
-}
-
-.settings h3 {
-  margin-top: 0;
-  margin-bottom: 16px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.setting-item {
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.setting-item label {
-  font-weight: 500;
-  color: var(--text-color);
-  min-width: 60px;
-}
-
-.setting-item select {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-color);
-  color: var(--text-color);
-}
-
-.btn-secondary {
-  background: var(--secondary-color);
-  color: white;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.2s;
-  margin-right: 8px;
-}
-
-.btn-secondary:hover {
-  background: #5a6268;
+  transition: width 0.3s ease;
 }
 
 body.pixel {

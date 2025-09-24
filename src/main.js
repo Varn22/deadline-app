@@ -5,6 +5,10 @@ let currentView = 'tasks'; // 'tasks', 'calendar', 'profile'
 let tasks = {};
 let currentTheme = localStorage.getItem('theme') || 'dark';
 let userId = null;
+// Prevent duplicate listeners
+let bound = { global: false, tasks: false, calendar: false, profile: false };
+// UI state
+let searchQuery = '';
 
 const API_BASE = 'https://deadline-backend-d18n.onrender.com/api';
 
@@ -75,14 +79,10 @@ function renderApp() {
     app.innerHTML = html;
 
     // Setup events based on view
-    setupGlobalEvents();
-    if (currentView === 'tasks') {
-        setupTasksEvents();
-    } else if (currentView === 'calendar') {
-        setupCalendarEvents();
-    } else if (currentView === 'profile') {
-        setupProfileEvents();
-    }
+    if (!bound.global) { setupGlobalEvents(); bound.global = true; }
+    if (currentView === 'tasks' && !bound.tasks) { setupTasksEvents(); bound.tasks = true; }
+    if (currentView === 'calendar' && !bound.calendar) { setupCalendarEvents(); bound.calendar = true; }
+    if (currentView === 'profile' && !bound.profile) { setupProfileEvents(); bound.profile = true; }
 }
 
 function setupGlobalEvents() {
@@ -123,6 +123,23 @@ function renderTasksView() {
         </header>
         
         <div class="content">
+            <div class="filters">
+                <input id="searchInput" type="text" placeholder="Поиск задач..." value="${searchQuery}" />
+                <select id="filterPriority">
+                    <option value="">Все приоритеты</option>
+                    <option value="high">Высокий</option>
+                    <option value="medium">Средний</option>
+                    <option value="low">Низкий</option>
+                </select>
+                <select id="filterCategory">
+                    <option value="">Все категории</option>
+                    <option value="study">Учеба</option>
+                    <option value="work">Работа</option>
+                    <option value="personal">Личное</option>
+                    <option value="other">Другое</option>
+                </select>
+            </div>
+            ${renderProgress()}
             <section class="today-deadline">
                 <h2>Дедлайн сегодня</h2>
                 ${todayTasks.length > 0 ? todayTasks.map((task, index) => `
@@ -131,6 +148,10 @@ function renderTasksView() {
                         <div class="task-info">
                             <span class="task-title">${task.text}</span>
                             <span class="task-category">${getCategoryName(task.category || 'other')}</span>
+                            <div class="task-actions">
+                                <button class="btn-icon" data-action="edit" data-date="${today}" data-index="${index}">✏️</button>
+                                <button class="btn-icon" data-action="delete" data-date="${today}" data-index="${index}">🗑️</button>
+                            </div>
                         </div>
                     </div>
                 `).join('') : '<p style="text-align: center; color: var(--muted-text); padding: 20px;">Нет задач на сегодня</p>'}
@@ -145,6 +166,10 @@ function renderTasksView() {
                             <span class="task-title">${task.text}</span>
                             <span class="task-date">${new Date(date).toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                             <span class="task-category">${getCategoryName(task.category || 'other')}</span>
+                            <div class="task-actions">
+                                <button class="btn-icon" data-action="edit" data-date="${date}" data-index="${index}">✏️</button>
+                                <button class="btn-icon" data-action="delete" data-date="${date}" data-index="${index}">🗑️</button>
+                            </div>
                         </div>
                     </div>
                 `).join('')}
@@ -261,17 +286,31 @@ function renderProfileView() {
     `;
 }
 
+function renderProgress() {
+    const stats = getStats();
+    const percent = stats.total ? Math.round((stats.completed / stats.total) * 100) : 0;
+    return `
+      <div class="progress"><span style="width:${percent}%;"></span></div>
+      <div style="font-size: 12px; color: var(--muted-text);">Прогресс: ${percent}%</div>
+    `;
+}
+
 function getUpcomingTasks() {
     const today = new Date();
     const upcoming = [];
     const dates = Object.keys(tasks).sort();
+    const prFilter = document.getElementById('filterPriority')?.value || '';
+    const catFilter = document.getElementById('filterCategory')?.value || '';
+    const query = searchQuery.toLowerCase();
     
     for (const date of dates) {
         if (new Date(date) > today) {
             tasks[date].forEach((task, index) => {
-                if (!task.completed) {
-                    upcoming.push({date, task, index});
-                }
+                if (task.completed) return;
+                if (prFilter && task.priority !== prFilter) return;
+                if (catFilter && task.category !== catFilter) return;
+                if (query && !task.text.toLowerCase().includes(query)) return;
+                upcoming.push({date, task, index});
             });
         }
         if (upcoming.length >= 5) break;
@@ -294,16 +333,70 @@ function getStats() {
 function setupTasksEvents() {
     // Add task button
     document.addEventListener('click', handleAddTask);
-    
     // Save task
     document.addEventListener('click', handleSaveTask);
-    
     // Task checkbox changes
     document.addEventListener('change', handleTaskCheckbox);
+    // Filters
+    document.addEventListener('input', handleSearchInput);
+    document.addEventListener('change', handleFiltersChange);
+    // Edit/Delete actions
+    document.addEventListener('click', handleTaskActionButtons);
+}
+
+function handleTaskActionButtons(e) {
+    const btn = e.target.closest('.btn-icon');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const date = btn.dataset.date;
+    const index = Number(btn.dataset.index);
+    if (!tasks[date]) return;
+
+    if (action === 'delete') {
+        tasks[date].splice(index, 1);
+        saveTasks(date);
+        renderApp();
+    }
+
+    if (action === 'edit') {
+        const task = tasks[date][index];
+        document.getElementById('taskModal').style.display = 'block';
+        document.getElementById('newTask').value = task.text;
+        document.getElementById('taskDate').value = date;
+        document.getElementById('taskCategory').value = task.category;
+        document.getElementById('taskPriority').value = task.priority;
+        // Override save for edit
+        const saveBtn = document.getElementById('saveTask');
+        saveBtn.textContent = 'Сохранить';
+        saveBtn.dataset.edit = 'true';
+        saveBtn.dataset.date = date;
+        saveBtn.dataset.index = index;
+    }
+}
+
+function handleSearchInput(e) {
+    if (e.target.id === 'searchInput') {
+        searchQuery = e.target.value;
+        renderApp();
+    }
+}
+
+function handleFiltersChange(e) {
+    if (e.target.id === 'filterPriority' || e.target.id === 'filterCategory') {
+        renderApp();
+    }
 }
 
 function handleAddTask(e) {
     if (e.target.id === 'addTaskBtn' || e.target.closest('#addTaskBtn')) {
+        const dateInput = document.getElementById('taskDate');
+        if (dateInput && !dateInput.value) {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = pad(now.getMonth() + 1);
+            const d = pad(now.getDate());
+            dateInput.value = `${y}-${m}-${d}`;
+        }
         document.getElementById('taskModal').style.display = 'block';
     }
 }
@@ -314,21 +407,38 @@ function handleSaveTask(e) {
         const date = document.getElementById('taskDate').value;
         const category = document.getElementById('taskCategory').value;
         const priority = document.getElementById('taskPriority').value;
-        
-        if (taskInput.value.trim() && date) {
+
+        if (!taskInput.value.trim() || !date) return;
+
+        if (e.target.dataset.edit === 'true') {
+            const oldDate = e.target.dataset.date;
+            const index = Number(e.target.dataset.index);
+            const task = tasks[oldDate][index];
+            // If date changed, move task
+            if (oldDate !== date) {
+                tasks[oldDate].splice(index, 1);
+                if (!tasks[date]) tasks[date] = [];
+                tasks[date].push({ text: taskInput.value.trim(), completed: task.completed, category, priority, created: task.created });
+                saveTasks(oldDate);
+                saveTasks(date);
+            } else {
+                task.text = taskInput.value.trim();
+                task.category = category;
+                task.priority = priority;
+                saveTasks(date);
+            }
+        } else {
             if (!tasks[date]) tasks[date] = [];
-            tasks[date].push({ 
-                text: taskInput.value.trim(), 
-                completed: false, 
-                category, 
-                priority,
-                created: new Date().toISOString()
-            });
+            tasks[date].push({ text: taskInput.value.trim(), completed: false, category, priority, created: new Date().toISOString() });
             saveTasks(date);
-            taskInput.value = '';
-            document.getElementById('taskModal').style.display = 'none';
-            renderApp();
         }
+
+        // Reset and close
+        e.target.textContent = 'Сохранить задачу';
+        e.target.dataset.edit = '';
+        document.getElementById('newTask').value = '';
+        document.getElementById('taskModal').style.display = 'none';
+        renderApp();
     }
 }
 
@@ -341,6 +451,15 @@ function handleTaskCheckbox(e) {
         saveTasks(date);
         renderApp();
     }
+}
+
+function handleSearch(e) {
+    searchQuery = e.target.value.toLowerCase();
+    renderApp();
+}
+
+function handleFilterChange(e) {
+    renderApp();
 }
 
 function setupCalendarEvents() {
@@ -487,6 +606,10 @@ function getCategoryName(key) {
     };
     return categories[key] || key;
 }
+
+// Helpers
+function pad(n) { return n.toString().padStart(2, '0'); }
+function formatDateKey(y, m, d) { return `${y}-${pad(m)}-${pad(d)}`; }
 
 // Initialize
 applyTheme();
