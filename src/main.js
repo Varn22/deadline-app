@@ -6,7 +6,7 @@ let tasks = {};
 let currentTheme = localStorage.getItem('theme') || 'dark';
 let userId = null;
 
-const API_BASE = 'https://deadline-backend.onrender.com/api';
+const API_BASE = 'https://deadline-backend-d18n.onrender.com/api';
 
 async function loadTasks() {
   if (!userId) return;
