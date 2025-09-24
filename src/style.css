@@ -248,11 +248,12 @@ body {
   margin: 10% auto;
   padding: 20px;
   border: 1px solid var(--border-color);
-  width: 90%;
+  width: calc(100% - 40px);
   max-width: 400px;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   animation: modalFadeIn 0.3s ease-out;
+  box-sizing: border-box;
 }
 
 @keyframes modalFadeIn {
@@ -297,6 +298,7 @@ body {
   color: var(--text-color);
   font-size: 1rem;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .modal-content input:focus, .modal-content select:focus {
@@ -554,4 +556,71 @@ body.dark .day:hover {
 
 .btn-secondary:hover {
   background: #5a6268;
+}
+
+body.pixel {
+  --bg-color: #2c1810;
+  --text-color: #f4f4f4;
+  --card-bg: #4a2c1a;
+  --border-color: #8b5a3c;
+  --shadow: 4px 4px 0px #1a0f08;
+  --success-color: #8bc34a;
+  --warning-color: #ffeb3b;
+  --danger-color: #f44336;
+  --muted-text: #b0b0b0;
+  --primary-color: #ff6b35;
+  --secondary-color: #8b5a3c;
+  --light-bg: #5d3a26;
+  --dark-bg: #1a0f08;
+  --dark-text: #f4f4f4;
+  --dark-card: #3a1f10;
+  --dark-border: #6b4226;
+  font-family: 'Courier New', monospace;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+body.pixel * {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+body.pixel .task-card {
+  border: 2px solid var(--border-color);
+  box-shadow: var(--shadow);
+  border-radius: 0;
+}
+
+body.pixel .modal-content {
+  border: 3px solid var(--border-color);
+  box-shadow: 6px 6px 0px #1a0f08;
+  border-radius: 0;
+}
+
+body.pixel .add-task-btn {
+  border-radius: 0;
+  box-shadow: 3px 3px 0px #1a0f08;
+  border: 2px solid var(--border-color);
+}
+
+body.pixel .bottom-nav {
+  border-top: 3px solid var(--border-color);
+  box-shadow: 0 -3px 6px rgba(0,0,0,0.3);
+}
+
+body.pixel .calendar {
+  border: 3px solid var(--border-color);
+  box-shadow: 4px 4px 0px #1a0f08;
+  border-radius: 0;
+}
+
+body.pixel .day {
+  border: 1px solid var(--border-color);
+}
+
+body.pixel .stats div {
+  border-radius: 0;
+  box-shadow: 2px 2px 0px #1a0f08;
 }

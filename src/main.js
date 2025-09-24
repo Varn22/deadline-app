@@ -59,15 +59,15 @@ function renderApp() {
         <nav class="bottom-nav">
             <button class="nav-item ${currentView === 'tasks' ? 'active' : ''}" data-view="tasks">
                 <span class="nav-icon">📋</span>
-                <span class="nav-label">Tasks</span>
+                <span class="nav-label">Задачи</span>
             </button>
             <button class="nav-item ${currentView === 'calendar' ? 'active' : ''}" data-view="calendar">
                 <span class="nav-icon">📅</span>
-                <span class="nav-label">Calendar</span>
+                <span class="nav-label">Календарь</span>
             </button>
             <button class="nav-item ${currentView === 'profile' ? 'active' : ''}" data-view="profile">
                 <span class="nav-icon">👤</span>
-                <span class="nav-label">Profile</span>
+                <span class="nav-label">Профиль</span>
             </button>
         </nav>
     `;
@@ -118,33 +118,33 @@ function renderTasksView() {
 
     return `
         <header class="app-header">
-            <h1>Tasks</h1>
+            <h1>Задачи</h1>
             <button class="add-task-btn" id="addTaskBtn">+</button>
         </header>
         
         <div class="content">
             <section class="today-deadline">
-                <h2>Today's Deadline</h2>
+                <h2>Дедлайн сегодня</h2>
                 ${todayTasks.length > 0 ? todayTasks.map((task, index) => `
                     <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
                         <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${today}" data-index="${index}">
                         <div class="task-info">
                             <span class="task-title">${task.text}</span>
-                            <span class="task-category">${task.category || 'other'}</span>
+                            <span class="task-category">${getCategoryName(task.category || 'other')}</span>
                         </div>
                     </div>
-                `).join('') : '<p style="text-align: center; color: var(--muted-text); padding: 20px;">No tasks for today</p>'}
+                `).join('') : '<p style="text-align: center; color: var(--muted-text); padding: 20px;">Нет задач на сегодня</p>'}
             </section>
             
             <section class="upcoming">
-                <h2>Upcoming</h2>
+                <h2>Предстоящие</h2>
                 ${upcomingTasks.map(({date, task, index}) => `
                     <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
                         <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${date}" data-index="${index}">
                         <div class="task-info">
                             <span class="task-title">${task.text}</span>
-                            <span class="task-date">${new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                            <span class="task-category">${task.category || 'other'}</span>
+                            <span class="task-date">${new Date(date).toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                            <span class="task-category">${getCategoryName(task.category || 'other')}</span>
                         </div>
                     </div>
                 `).join('')}
@@ -154,21 +154,21 @@ function renderTasksView() {
         <div id="taskModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <span class="close">&times;</span>
-                <h3>Add New Task</h3>
-                <input type="text" id="newTask" placeholder="Task name">
-                <input type="date" id="taskDate">
+                <h3>Новая задача</h3>
+                <input type="text" id="newTask" placeholder="Название задачи">
+                <input type="date" id="taskDate" placeholder="Выберите дату">
                 <select id="taskCategory">
-                    <option value="study">Study</option>
-                    <option value="work">Work</option>
-                    <option value="personal">Personal</option>
-                    <option value="other">Other</option>
+                    <option value="study">Учеба</option>
+                    <option value="work">Работа</option>
+                    <option value="personal">Личное</option>
+                    <option value="other">Другое</option>
                 </select>
                 <select id="taskPriority">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="low">Низкий</option>
+                    <option value="medium">Средний</option>
+                    <option value="high">Высокий</option>
                 </select>
-                <button id="saveTask">Save Task</button>
+                <button id="saveTask">Сохранить задачу</button>
             </div>
         </div>
     `;
@@ -187,7 +187,7 @@ function renderCalendarView() {
                 <h2>${currentDate.toLocaleString('en-US', { month: 'long' })} ${year}</h2>
             </div>
             <div class="weekdays">
-                <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                <div>Вс</div><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div>
             </div>
             <div class="days">
     `;
@@ -219,7 +219,7 @@ function renderCalendarView() {
 
     return `
         <header class="app-header">
-            <h1>Calendar</h1>
+            <h1>Календарь</h1>
         </header>
         <div class="content">
             ${calendarHtml}
@@ -231,29 +231,30 @@ function renderProfileView() {
     const stats = getStats();
     return `
         <header class="app-header">
-            <h1>Profile</h1>
+            <h1>Профиль</h1>
         </header>
         <div class="content">
             <div class="stats">
-                <div>Total Tasks: ${stats.total}</div>
-                <div>Completed: ${stats.completed}</div>
-                <div>Pending: ${stats.pending}</div>
+                <div>Всего задач: ${stats.total}</div>
+                <div>Выполнено: ${stats.completed}</div>
+                <div>Осталось: ${stats.pending}</div>
             </div>
             
             <div class="settings">
-                <h3>Settings</h3>
+                <h3>Настройки</h3>
                 <div class="setting-item">
-                    <label for="themeToggle">Theme:</label>
+                    <label for="themeToggle">Тема:</label>
                     <select id="themeToggle">
-                        <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>Light</option>
-                        <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>Dark</option>
+                        <option value="light" ${currentTheme === 'light' ? 'selected' : ''}>Светлая</option>
+                        <option value="dark" ${currentTheme === 'dark' ? 'selected' : ''}>Тёмная</option>
+                        <option value="pixel" ${currentTheme === 'pixel' ? 'selected' : ''}>3D Пиксели</option>
                     </select>
                 </div>
                 
                 <div class="setting-item">
-                    <button id="exportBtn" class="btn-secondary">Export Tasks</button>
+                    <button id="exportBtn" class="btn-secondary">Экспорт задач</button>
                     <input type="file" id="importFile" accept=".json" style="display: none;">
-                    <button id="importBtn" class="btn-secondary">Import Tasks</button>
+                    <button id="importBtn" class="btn-secondary">Импорт задач</button>
                 </div>
             </div>
         </div>
@@ -367,7 +368,7 @@ function handleCalendarTaskCheckbox(e) {
         // Find the task in the tasks object
         const dateKey = Object.keys(tasks).find(key => {
             const taskDate = new Date(key);
-            return taskDate.toLocaleDateString('en-US') === date;
+            return taskDate.toLocaleDateString('ru-RU') === date;
         });
         
         if (dateKey && tasks[dateKey]) {
@@ -380,6 +381,34 @@ function handleCalendarTaskCheckbox(e) {
             }
         }
     }
+}
+
+function showCalendarTasks(date) {
+    const modal = document.getElementById('calendarModal');
+    const modalDate = document.getElementById('calendarModalDate');
+    const taskList = document.getElementById('calendarTaskList');
+
+    modalDate.textContent = new Date(date).toLocaleDateString('ru-RU');
+    taskList.innerHTML = '';
+
+    if (tasks[date]) {
+        tasks[date].forEach((task, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <input type="checkbox" ${task.completed ? 'checked' : ''}>
+                <span>${task.text}</span>
+            `;
+            li.querySelector('input').addEventListener('change', () => {
+                task.completed = li.querySelector('input').checked;
+                saveTasks(date);
+                showCalendarTasks(date);
+                renderApp();
+            });
+            taskList.appendChild(li);
+        });
+    }
+
+    modal.style.display = 'block';
 }
 
 function setupProfileEvents() {
@@ -447,6 +476,16 @@ function handleImportFile(e) {
             reader.readAsText(file);
         }
     }
+}
+
+function getCategoryName(key) {
+    const categories = {
+        study: 'Учеба',
+        work: 'Работа',
+        personal: 'Личное',
+        other: 'Другое'
+    };
+    return categories[key] || key;
 }
 
 // Initialize
