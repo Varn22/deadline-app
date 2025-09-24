@@ -9,6 +9,29 @@ let userId = null;
 let bound = { global: false, tasks: false, calendar: false, profile: false };
 // UI state
 let searchQuery = '';
+let filterStarred = '';
+let notifications = [];
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
 
 const API_BASE = 'https://deadline-backend-d18n.onrender.com/api';
 
@@ -113,7 +136,14 @@ function handleModalClose(e) {
 
 function renderTasksView() {
     const today = new Date().toISOString().split('T')[0];
-    const todayTasks = tasks[today] || [];
+    const todayTasks = (tasks[today] || []).filter(task => {
+        if (task.completed) return false;
+        if (document.getElementById('filterPriority')?.value && task.priority !== document.getElementById('filterPriority').value) return false;
+        if (document.getElementById('filterCategory')?.value && task.category !== document.getElementById('filterCategory').value) return false;
+        if (filterStarred === 'starred' && !task.starred) return false;
+        if (searchQuery && !task.text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        return true;
+    });
     const upcomingTasks = getUpcomingTasks();
 
     return `
@@ -124,20 +154,45 @@ function renderTasksView() {
         
         <div class="content">
             <div class="filters">
-                <input id="searchInput" type="text" placeholder="Поиск задач..." value="${searchQuery}" />
-                <select id="filterPriority">
-                    <option value="">Все приоритеты</option>
-                    <option value="high">Высокий</option>
-                    <option value="medium">Средний</option>
-                    <option value="low">Низкий</option>
-                </select>
-                <select id="filterCategory">
-                    <option value="">Все категории</option>
-                    <option value="study">Учеба</option>
-                    <option value="work">Работа</option>
-                    <option value="personal">Личное</option>
-                    <option value="other">Другое</option>
-                </select>
+                <div>
+                    <label>🔍 Поиск</label>
+                    <input id="searchInput" type="text" placeholder="Введите текст задачи..." value="${searchQuery}" />
+                </div>
+                <div>
+                    <label>⚡ Приоритет</label>
+                    <select id="filterPriority">
+                        <option value="">Все приоритеты</option>
+                        <option value="high">🔴 Высокий</option>
+                        <option value="medium">🟡 Средний</option>
+                        <option value="low">🟢 Низкий</option>
+                    </select>
+                </div>
+                <div>
+                    <label>📂 Категория</label>
+                    <select id="filterCategory">
+                        <option value="">Все категории</option>
+                        <option value="study">📚 Учеба</option>
+                        <option value="work">💼 Работа</option>
+                        <option value="personal">🏠 Личное</option>
+                        <option value="other">📌 Другое</option>
+                    </select>
+                </div>
+                <div>
+                    <label>📊 Сортировка</label>
+                    <select id="sortBy">
+                        <option value="date">По дате</option>
+                        <option value="priority">По приоритету</option>
+                        <option value="category">По категории</option>
+                        <option value="text">По алфавиту</option>
+                    </select>
+                </div>
+                <div>
+                    <label>⭐ Избранные</label>
+                    <select id="filterStarred" value="${filterStarred}">
+                        <option value="">Все задачи</option>
+                        <option value="starred">Только избранные</option>
+                    </select>
+                </div>
             </div>
             ${renderProgress()}
             <section class="today-deadline">
@@ -149,6 +204,7 @@ function renderTasksView() {
                             <span class="task-title">${task.text}</span>
                             <span class="task-category">${getCategoryName(task.category || 'other')}</span>
                             <div class="task-actions">
+                                <button class="btn-icon" data-action="star" data-date="${today}" data-index="${index}">${task.starred ? '⭐' : '☆'}</button>
                                 <button class="btn-icon" data-action="edit" data-date="${today}" data-index="${index}">✏️</button>
                                 <button class="btn-icon" data-action="delete" data-date="${today}" data-index="${index}">🗑️</button>
                             </div>
@@ -167,6 +223,7 @@ function renderTasksView() {
                             <span class="task-date">${new Date(date).toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                             <span class="task-category">${getCategoryName(task.category || 'other')}</span>
                             <div class="task-actions">
+                                <button class="btn-icon" data-action="star" data-date="${date}" data-index="${index}">${task.starred ? '⭐' : '☆'}</button>
                                 <button class="btn-icon" data-action="edit" data-date="${date}" data-index="${index}">✏️</button>
                                 <button class="btn-icon" data-action="delete" data-date="${date}" data-index="${index}">🗑️</button>
                             </div>
@@ -224,7 +281,7 @@ function renderCalendarView() {
 
     // Days
     for (let day = 1; day <= lastDate; day++) {
-        const dateKey = `${year}-${month + 1}-${day}`;
+        const dateKey = formatDateKey(year, month + 1, day);
         const hasTasks = tasks[dateKey] && tasks[dateKey].length > 0;
         const isToday = new Date().toDateString() === new Date(dateKey).toDateString();
         calendarHtml += `<div class="day ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${dateKey}">${day}</div>`;
@@ -298,24 +355,44 @@ function renderProgress() {
 function getUpcomingTasks() {
     const today = new Date();
     const upcoming = [];
-    const dates = Object.keys(tasks).sort();
     const prFilter = document.getElementById('filterPriority')?.value || '';
     const catFilter = document.getElementById('filterCategory')?.value || '';
+    const starFilter = document.getElementById('filterStarred')?.value || '';
+    const sortBy = document.getElementById('sortBy')?.value || 'date';
     const query = searchQuery.toLowerCase();
     
-    for (const date of dates) {
-        if (new Date(date) > today) {
+    // Collect all tasks
+    const allTasks = [];
+    for (const date in tasks) {
+        if (new Date(date) >= today) {
             tasks[date].forEach((task, index) => {
                 if (task.completed) return;
                 if (prFilter && task.priority !== prFilter) return;
                 if (catFilter && task.category !== catFilter) return;
+                if (starFilter === 'starred' && !task.starred) return;
                 if (query && !task.text.toLowerCase().includes(query)) return;
-                upcoming.push({date, task, index});
+                allTasks.push({ date, task, index });
             });
         }
-        if (upcoming.length >= 5) break;
     }
-    return upcoming;
+    
+    // Sort tasks
+    allTasks.sort((a, b) => {
+        switch (sortBy) {
+            case 'priority':
+                const priorityOrder = { high: 3, medium: 2, low: 1 };
+                return priorityOrder[b.task.priority] - priorityOrder[a.task.priority];
+            case 'category':
+                return a.task.category.localeCompare(b.task.category);
+            case 'text':
+                return a.task.text.localeCompare(b.task.text);
+            case 'date':
+            default:
+                return new Date(a.date) - new Date(b.date);
+        }
+    });
+    
+    return allTasks.slice(0, 10); // Show more tasks
 }
 
 function getStats() {
@@ -372,6 +449,12 @@ function handleTaskActionButtons(e) {
         saveBtn.dataset.date = date;
         saveBtn.dataset.index = index;
     }
+
+    if (action === 'star') {
+        tasks[date][index].starred = !tasks[date][index].starred;
+        saveTasks(date);
+        renderApp();
+    }
 }
 
 function handleSearchInput(e) {
@@ -382,7 +465,8 @@ function handleSearchInput(e) {
 }
 
 function handleFiltersChange(e) {
-    if (e.target.id === 'filterPriority' || e.target.id === 'filterCategory') {
+    if (e.target.id === 'filterPriority' || e.target.id === 'filterCategory' || e.target.id === 'sortBy' || e.target.id === 'filterStarred') {
+        filterStarred = document.getElementById('filterStarred')?.value || '';
         renderApp();
     }
 }
@@ -418,7 +502,7 @@ function handleSaveTask(e) {
             if (oldDate !== date) {
                 tasks[oldDate].splice(index, 1);
                 if (!tasks[date]) tasks[date] = [];
-                tasks[date].push({ text: taskInput.value.trim(), completed: task.completed, category, priority, created: task.created });
+                tasks[date].push({ text: taskInput.value.trim(), completed: task.completed, category, priority, starred: task.starred, created: task.created });
                 saveTasks(oldDate);
                 saveTasks(date);
             } else {
@@ -429,7 +513,7 @@ function handleSaveTask(e) {
             }
         } else {
             if (!tasks[date]) tasks[date] = [];
-            tasks[date].push({ text: taskInput.value.trim(), completed: false, category, priority, created: new Date().toISOString() });
+            tasks[date].push({ text: taskInput.value.trim(), completed: false, category, priority, starred: false, created: new Date().toISOString() });
             saveTasks(date);
         }
 
@@ -465,9 +549,6 @@ function handleFilterChange(e) {
 function setupCalendarEvents() {
     // Calendar day clicks
     document.addEventListener('click', handleCalendarDayClick);
-    
-    // Calendar modal task checkboxes
-    document.addEventListener('change', handleCalendarTaskCheckbox);
 }
 
 function handleCalendarDayClick(e) {
@@ -477,45 +558,27 @@ function handleCalendarDayClick(e) {
     }
 }
 
-function handleCalendarTaskCheckbox(e) {
-    if (e.target.type === 'checkbox' && e.target.closest('#calendarTaskList')) {
-        const checkbox = e.target;
-        const li = checkbox.closest('li');
-        const taskText = li.querySelector('span').textContent;
-        const date = document.getElementById('calendarModalDate').textContent;
-        
-        // Find the task in the tasks object
-        const dateKey = Object.keys(tasks).find(key => {
-            const taskDate = new Date(key);
-            return taskDate.toLocaleDateString('ru-RU') === date;
-        });
-        
-        if (dateKey && tasks[dateKey]) {
-            const taskIndex = tasks[dateKey].findIndex(task => task.text === taskText);
-            if (taskIndex !== -1) {
-                tasks[dateKey][taskIndex].completed = checkbox.checked;
-                saveTasks(dateKey);
-                showCalendarTasks(dateKey);
-                renderApp();
-            }
-        }
-    }
-}
-
 function showCalendarTasks(date) {
     const modal = document.getElementById('calendarModal');
     const modalDate = document.getElementById('calendarModalDate');
     const taskList = document.getElementById('calendarTaskList');
 
-    modalDate.textContent = new Date(date).toLocaleDateString('ru-RU');
+    modalDate.textContent = new Date(date).toLocaleDateString('ru-RU', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    
     taskList.innerHTML = '';
 
-    if (tasks[date]) {
+    if (tasks[date] && tasks[date].length > 0) {
         tasks[date].forEach((task, index) => {
             const li = document.createElement('li');
             li.innerHTML = `
-                <input type="checkbox" ${task.completed ? 'checked' : ''}>
+                <input type="checkbox" ${task.completed ? 'checked' : ''} data-index="${index}">
                 <span>${task.text}</span>
+                <small>${getCategoryName(task.category)} • ${task.priority === 'high' ? 'Высокий' : task.priority === 'medium' ? 'Средний' : 'Низкий'}</small>
             `;
             li.querySelector('input').addEventListener('change', () => {
                 task.completed = li.querySelector('input').checked;
@@ -525,6 +588,8 @@ function showCalendarTasks(date) {
             });
             taskList.appendChild(li);
         });
+    } else {
+        taskList.innerHTML = '<li style="text-align: center; color: var(--text-muted);">Нет задач на эту дату</li>';
     }
 
     modal.style.display = 'block';
@@ -554,13 +619,26 @@ function handleThemeToggle(e) {
 
 function handleExport(e) {
     if (e.target.id === 'exportBtn') {
-        const dataStr = JSON.stringify(tasks, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        const exportFileDefaultName = 'tasks.json';
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
+        try {
+            const dataStr = JSON.stringify(tasks, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `tasks_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            URL.revokeObjectURL(url);
+            
+            // Show success message
+            showNotification('✅ Задачи успешно экспортированы!', 'success');
+        } catch (error) {
+            console.error('Export error:', error);
+            showNotification('❌ Ошибка при экспорте задач', 'error');
+        }
     }
 }
 
