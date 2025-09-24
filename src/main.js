@@ -9,7 +9,6 @@ let userId = null;
 let bound = { global: false, tasks: false, calendar: false, profile: false };
 // UI state
 let searchQuery = '';
-let filterStarred = '';
 let notifications = [];
 
 // Notification system
@@ -136,12 +135,17 @@ function handleModalClose(e) {
 
 function renderTasksView() {
     const today = new Date().toISOString().split('T')[0];
+    const prFilter = document.getElementById('filterPriority')?.value || '';
+    const catFilter = document.getElementById('filterCategory')?.value || '';
+    const starFilter = document.getElementById('filterStarred')?.value || '';
+    const query = searchQuery.toLowerCase();
+    
     const todayTasks = (tasks[today] || []).filter(task => {
         if (task.completed) return false;
-        if (document.getElementById('filterPriority')?.value && task.priority !== document.getElementById('filterPriority').value) return false;
-        if (document.getElementById('filterCategory')?.value && task.category !== document.getElementById('filterCategory').value) return false;
-        if (filterStarred === 'starred' && !task.starred) return false;
-        if (searchQuery && !task.text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (prFilter && task.priority !== prFilter) return false;
+        if (catFilter && task.category !== catFilter) return false;
+        if (starFilter === 'starred' && !task.starred) return false;
+        if (query && !task.text.toLowerCase().includes(query)) return false;
         return true;
     });
     const upcomingTasks = getUpcomingTasks();
@@ -188,7 +192,7 @@ function renderTasksView() {
                 </div>
                 <div>
                     <label>⭐ Избранные</label>
-                    <select id="filterStarred" value="${filterStarred}">
+                    <select id="filterStarred">
                         <option value="">Все задачи</option>
                         <option value="starred">Только избранные</option>
                     </select>
@@ -369,7 +373,6 @@ function getUpcomingTasks() {
                 if (task.completed) return;
                 if (prFilter && task.priority !== prFilter) return;
                 if (catFilter && task.category !== catFilter) return;
-                if (starFilter === 'starred' && !task.starred) return;
                 if (query && !task.text.toLowerCase().includes(query)) return;
                 allTasks.push({ date, task, index });
             });
@@ -466,7 +469,6 @@ function handleSearchInput(e) {
 
 function handleFiltersChange(e) {
     if (e.target.id === 'filterPriority' || e.target.id === 'filterCategory' || e.target.id === 'sortBy' || e.target.id === 'filterStarred') {
-        filterStarred = document.getElementById('filterStarred')?.value || '';
         renderApp();
     }
 }
