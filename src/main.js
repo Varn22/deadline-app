@@ -33,7 +33,9 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-const API_BASE = 'https://deadline-backend-d18n.onrender.com/api';
+const API_BASE = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3001/api' 
+  : 'https://deadline-backend-d18n.onrender.com/api';
 
 async function loadTasks() {
   if (!userId) return;
