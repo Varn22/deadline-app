@@ -74,21 +74,40 @@ function renderApp() {
 
     app.innerHTML = html;
 
-    // Event listeners
-    document.querySelectorAll('.nav-item').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            currentView = e.target.dataset.view;
-            renderApp();
-        });
-    });
-
     // Setup events based on view
+    setupGlobalEvents();
     if (currentView === 'tasks') {
         setupTasksEvents();
     } else if (currentView === 'calendar') {
         setupCalendarEvents();
     } else if (currentView === 'profile') {
         setupProfileEvents();
+    }
+}
+
+function setupGlobalEvents() {
+    // Navigation
+    document.addEventListener('click', handleNavClick);
+    
+    // Modal close
+    document.addEventListener('click', handleModalClose);
+}
+
+function handleNavClick(e) {
+    if (e.target.closest('.nav-item')) {
+        e.preventDefault();
+        const navItem = e.target.closest('.nav-item');
+        const view = navItem.dataset.view;
+        if (view && view !== currentView) {
+            currentView = view;
+            renderApp();
+        }
+    }
+}
+
+function handleModalClose(e) {
+    if (e.target.classList.contains('close') || e.target.classList.contains('modal')) {
+        e.target.closest('.modal').style.display = 'none';
     }
 }
 
@@ -272,15 +291,24 @@ function getStats() {
 }
 
 function setupTasksEvents() {
-    document.getElementById('addTaskBtn').addEventListener('click', () => {
+    // Add task button
+    document.addEventListener('click', handleAddTask);
+    
+    // Save task
+    document.addEventListener('click', handleSaveTask);
+    
+    // Task checkbox changes
+    document.addEventListener('change', handleTaskCheckbox);
+}
+
+function handleAddTask(e) {
+    if (e.target.id === 'addTaskBtn' || e.target.closest('#addTaskBtn')) {
         document.getElementById('taskModal').style.display = 'block';
-    });
+    }
+}
 
-    document.querySelector('.close').addEventListener('click', () => {
-        document.getElementById('taskModal').style.display = 'none';
-    });
-
-    document.getElementById('saveTask').addEventListener('click', async () => {
+function handleSaveTask(e) {
+    if (e.target.id === 'saveTask') {
         const taskInput = document.getElementById('newTask');
         const date = document.getElementById('taskDate').value;
         const category = document.getElementById('taskCategory').value;
@@ -295,138 +323,128 @@ function setupTasksEvents() {
                 priority,
                 created: new Date().toISOString()
             });
-            await saveTasks(date);
+            saveTasks(date);
             taskInput.value = '';
             document.getElementById('taskModal').style.display = 'none';
             renderApp();
         }
-    });
+    }
+}
 
-    document.querySelectorAll('.task-card input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', async () => {
-            const date = checkbox.dataset.date;
-            const index = checkbox.dataset.index;
-            tasks[date][index].completed = checkbox.checked;
-            await saveTasks(date);
-            renderApp();
-        });
-    });
+function handleTaskCheckbox(e) {
+    if (e.target.type === 'checkbox' && e.target.closest('.task-card')) {
+        const checkbox = e.target;
+        const date = checkbox.dataset.date;
+        const index = checkbox.dataset.index;
+        tasks[date][index].completed = checkbox.checked;
+        saveTasks(date);
+        renderApp();
+    }
 }
 
 function setupCalendarEvents() {
-    // Use event delegation for dynamic elements
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('day') && currentView === 'calendar') {
-            const date = e.target.dataset.date;
-            showCalendarTasks(date);
+    // Calendar day clicks
+    document.addEventListener('click', handleCalendarDayClick);
+    
+    // Calendar modal task checkboxes
+    document.addEventListener('change', handleCalendarTaskCheckbox);
+}
+
+function handleCalendarDayClick(e) {
+    if (e.target.classList.contains('day') && currentView === 'calendar') {
+        const date = e.target.dataset.date;
+        showCalendarTasks(date);
+    }
+}
+
+function handleCalendarTaskCheckbox(e) {
+    if (e.target.type === 'checkbox' && e.target.closest('#calendarTaskList')) {
+        const checkbox = e.target;
+        const li = checkbox.closest('li');
+        const taskText = li.querySelector('span').textContent;
+        const date = document.getElementById('calendarModalDate').textContent;
+        
+        // Find the task in the tasks object
+        const dateKey = Object.keys(tasks).find(key => {
+            const taskDate = new Date(key);
+            return taskDate.toLocaleDateString('en-US') === date;
+        });
+        
+        if (dateKey && tasks[dateKey]) {
+            const taskIndex = tasks[dateKey].findIndex(task => task.text === taskText);
+            if (taskIndex !== -1) {
+                tasks[dateKey][taskIndex].completed = checkbox.checked;
+                saveTasks(dateKey);
+                showCalendarTasks(dateKey);
+                renderApp();
+            }
         }
-        if (e.target.classList.contains('close') && document.getElementById('calendarModal').style.display === 'block') {
-            document.getElementById('calendarModal').style.display = 'none';
-        }
-    });
+    }
 }
 
 function setupProfileEvents() {
-    const themeToggle = document.getElementById('themeToggle');
-    const exportBtn = document.getElementById('exportBtn');
-    const importBtn = document.getElementById('importBtn');
-    const importFile = document.getElementById('importFile');
+    // Theme toggle
+    document.addEventListener('change', handleThemeToggle);
+    
+    // Export button
+    document.addEventListener('click', handleExport);
+    
+    // Import button
+    document.addEventListener('click', handleImportClick);
+    
+    // Import file change
+    document.addEventListener('change', handleImportFile);
+}
 
-    if (themeToggle) {
-        themeToggle.addEventListener('change', (e) => {
-            currentTheme = e.target.value;
-            localStorage.setItem('theme', currentTheme);
-            applyTheme();
-        });
+function handleThemeToggle(e) {
+    if (e.target.id === 'themeToggle') {
+        currentTheme = e.target.value;
+        localStorage.setItem('theme', currentTheme);
+        applyTheme();
     }
+}
 
-    if (exportBtn) {
-        exportBtn.addEventListener('click', () => {
-            const dataStr = JSON.stringify(tasks, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-            const exportFileDefaultName = 'tasks.json';
-            const linkElement = document.createElement('a');
-            linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', exportFileDefaultName);
-            linkElement.click();
-        });
+function handleExport(e) {
+    if (e.target.id === 'exportBtn') {
+        const dataStr = JSON.stringify(tasks, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const exportFileDefaultName = 'tasks.json';
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
     }
+}
 
-    if (importBtn) {
-        importBtn.addEventListener('click', () => {
-            importFile.click();
-        });
+function handleImportClick(e) {
+    if (e.target.id === 'importBtn') {
+        document.getElementById('importFile').click();
     }
+}
 
-    if (importFile) {
-        importFile.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const importedTasks = JSON.parse(e.target.result);
-                        tasks = importedTasks;
-                        localStorage.setItem('tasks', JSON.stringify(tasks));
-                        // Save to backend if user is logged in
-                        if (userId) {
-                            for (const date in tasks) {
-                                await saveTasks(date);
-                            }
+function handleImportFile(e) {
+    if (e.target.id === 'importFile') {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const importedTasks = JSON.parse(e.target.result);
+                    tasks = importedTasks;
+                    localStorage.setItem('tasks', JSON.stringify(tasks));
+                    // Save to backend if user is logged in
+                    if (userId) {
+                        for (const date in tasks) {
+                            await saveTasks(date);
                         }
-                        renderApp();
-                        alert('Tasks imported successfully!');
-                    } catch (error) {
-                        alert('Error importing tasks. Please check the file format.');
                     }
-                };
-                reader.readAsText(file);
-            }
-        });
+                    renderApp();
+                    alert('Tasks imported successfully!');
+                } catch (error) {
+                    alert('Error importing tasks. Please check the file format.');
+                }
+            };
+            reader.readAsText(file);
+        }
     }
-}
-
-function showCalendarTasks(date) {
-    const modal = document.getElementById('calendarModal');
-    const modalDate = document.getElementById('calendarModalDate');
-    const taskList = document.getElementById('calendarTaskList');
-
-    modalDate.textContent = new Date(date).toLocaleDateString('en-US');
-    taskList.innerHTML = '';
-
-    if (tasks[date]) {
-        tasks[date].forEach((task, index) => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <input type="checkbox" ${task.completed ? 'checked' : ''}>
-                <span>${task.text}</span>
-            `;
-            li.querySelector('input').addEventListener('change', async () => {
-                task.completed = li.querySelector('input').checked;
-                await saveTasks(date);
-                showCalendarTasks(date);
-                renderApp();
-            });
-            taskList.appendChild(li);
-        });
-    }
-
-    modal.style.display = 'block';
-}
-
-// Initialize
-applyTheme();
-if (window.Telegram && window.Telegram.WebApp) {
-    window.Telegram.WebApp.ready();
-    window.Telegram.WebApp.expand();
-    userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
-    if (userId) {
-        loadTasks().then(() => renderApp());
-    } else {
-        tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-        renderApp();
-    }
-} else {
-    tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-    renderApp();
 }
