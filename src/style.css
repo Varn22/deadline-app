@@ -782,3 +782,51 @@ body.pixel .bottom-nav {
 .notification-info {
   background: var(--accent-primary);
 }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .task-card {
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  
+  .task-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .task-actions {
+    align-self: flex-end;
+  }
+  
+  .filters {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .filters > div {
+    width: 100%;
+  }
+  
+  .day {
+    padding: 12px 6px;
+    min-height: 40px;
+    font-size: 14px;
+  }
+  
+  .calendar {
+    padding: 16px;
+  }
+  
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  .modal-content {
+    width: calc(100% - 32px);
+    padding: 20px;
+    max-height: 80vh;
+  }
+}

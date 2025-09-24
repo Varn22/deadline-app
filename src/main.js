@@ -494,14 +494,14 @@ function handleSaveTask(e) {
         const priority = document.getElementById('taskPriority').value;
         let taskText = taskInput.value.trim();
 
-        // Parse date from text if date field is empty
-        if (!date) {
-            const parsedDate = parseDateFromText(taskText);
-            if (parsedDate) {
-                date = parsedDate;
-                // Remove date from task text
-                taskText = taskText.replace(/\s*\d{1,2}\.\d{1,2}\.\d{4}\s*/, '').trim();
-            }
+        // Parse date from text (always try, even if date field is filled)
+        const parsedDate = parseDateFromText(taskText);
+        if (parsedDate) {
+            date = parsedDate;
+            // Remove date from task text
+            taskText = taskText.replace(/\s*\d{1,2}\.\d{1,2}\.\d{4}\s*/, '').trim();
+            // Show notification that date was parsed
+            showNotification(`📅 Дата распознана: ${new Date(parsedDate).toLocaleDateString('ru-RU')}`, 'info');
         }
 
         if (!taskText || !date) return;
@@ -561,9 +561,15 @@ function handleFilterChange(e) {
 function setupCalendarEvents() {
     // Calendar day clicks
     document.addEventListener('click', handleCalendarDayClick);
+    document.addEventListener('touchend', handleCalendarDayClick);
 }
 
 function handleCalendarDayClick(e) {
+    // Prevent double firing on touch devices
+    if (e.type === 'touchend') {
+        e.preventDefault();
+    }
+    
     if (e.target.classList.contains('day') && currentView === 'calendar') {
         const date = e.target.dataset.date;
         showCalendarTasks(date);
@@ -633,20 +639,33 @@ function handleExport(e) {
     if (e.target.id === 'exportBtn') {
         try {
             const dataStr = JSON.stringify(tasks, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
             
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `tasks_backup_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            URL.revokeObjectURL(url);
-            
-            // Show success message
-            showNotification('✅ Задачи успешно экспортированы!', 'success');
+            // Try to download file
+            try {
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `tasks_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                URL.revokeObjectURL(url);
+                showNotification('✅ Задачи экспортированы в файл!', 'success');
+            } catch (downloadError) {
+                // Fallback: copy to clipboard
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(dataStr).then(() => {
+                        showNotification('✅ Данные скопированы в буфер обмена!', 'success');
+                    }).catch(() => {
+                        showNotification('❌ Не удалось скачать или скопировать данные', 'error');
+                    });
+                } else {
+                    showNotification('❌ Экспорт не поддерживается на этом устройстве', 'error');
+                }
+            }
         } catch (error) {
             console.error('Export error:', error);
             showNotification('❌ Ошибка при экспорте задач', 'error');
@@ -704,11 +723,19 @@ function formatDateKey(y, m, d) { return `${y}-${pad(m)}-${pad(d)}`; }
 
 // Parse date from task text
 function parseDateFromText(text) {
-    const dateRegex = /(\d{1,2})\.(\d{1,2})\.(\d{4})/;
+    // Support multiple date formats: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY
+    const dateRegex = /(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})/;
     const match = text.match(dateRegex);
     if (match) {
-        const [, day, month, year] = match;
-        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        let [, day, month, year] = match;
+        day = day.padStart(2, '0');
+        month = month.padStart(2, '0');
+        
+        // Validate date
+        const dateObj = new Date(`${year}-${month}-${day}`);
+        if (dateObj.getFullYear() == year && dateObj.getMonth() + 1 == parseInt(month) && dateObj.getDate() == parseInt(day)) {
+            return `${year}-${month}-${day}`;
+        }
     }
     return null;
 }
