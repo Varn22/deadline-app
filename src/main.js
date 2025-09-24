@@ -10,6 +10,7 @@ let bound = { global: false, tasks: false, calendar: false, profile: false };
 // UI state
 let searchQuery = '';
 let notifications = [];
+let calendarDate = new Date(); // Current calendar view date
 
 // Notification system
 function showNotification(message, type = 'info') {
@@ -261,16 +262,18 @@ function renderTasksView() {
 }
 
 function renderCalendarView() {
-    const currentDate = new Date();
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const lastDate = new Date(year, month + 1, 0).getDate();
+    const currentDate = new Date();
 
     let calendarHtml = `
         <div class="calendar">
             <div class="calendar-header">
-                <h2>${currentDate.toLocaleString('en-US', { month: 'long' })} ${year}</h2>
+                <button class="nav-btn" id="prevMonth">‹</button>
+                <h2>${calendarDate.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })}</h2>
+                <button class="nav-btn" id="nextMonth">›</button>
             </div>
             <div class="weekdays">
                 <div>Вс</div><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div>
@@ -562,6 +565,9 @@ function setupCalendarEvents() {
     // Calendar day clicks
     document.addEventListener('click', handleCalendarDayClick);
     document.addEventListener('touchend', handleCalendarDayClick);
+    
+    // Calendar navigation
+    document.addEventListener('click', handleCalendarNavigation);
 }
 
 function handleCalendarDayClick(e) {
@@ -573,6 +579,16 @@ function handleCalendarDayClick(e) {
     if (e.target.classList.contains('day') && currentView === 'calendar') {
         const date = e.target.dataset.date;
         showCalendarTasks(date);
+    }
+}
+
+function handleCalendarNavigation(e) {
+    if (e.target.id === 'prevMonth') {
+        calendarDate.setMonth(calendarDate.getMonth() - 1);
+        renderApp();
+    } else if (e.target.id === 'nextMonth') {
+        calendarDate.setMonth(calendarDate.getMonth() + 1);
+        renderApp();
     }
 }
 
@@ -660,10 +676,12 @@ function handleExport(e) {
                     navigator.clipboard.writeText(dataStr).then(() => {
                         showNotification('✅ Данные скопированы в буфер обмена!', 'success');
                     }).catch(() => {
-                        showNotification('❌ Не удалось скачать или скопировать данные', 'error');
+                        // Second fallback: show in modal
+                        showExportModal(dataStr);
                     });
                 } else {
-                    showNotification('❌ Экспорт не поддерживается на этом устройстве', 'error');
+                    // Fallback: show in modal
+                    showExportModal(dataStr);
                 }
             }
         } catch (error) {
@@ -707,6 +725,22 @@ function handleImportFile(e) {
     }
 }
 
+function showExportModal(dataStr) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h3>Экспорт данных</h3>
+            <p>Скопируйте данные ниже и сохраните их в файл:</p>
+            <textarea readonly style="width: 100%; height: 200px; margin: 10px 0; padding: 10px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); font-family: monospace; font-size: 12px;">${dataStr}</textarea>
+            <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => showNotification('✅ Скопировано!', 'success')).catch(() => showNotification('❌ Не удалось скопировать', 'error'))" style="width: 100%; padding: 12px; background: var(--accent-primary); color: white; border: none; border-radius: var(--radius-md); cursor: pointer;">Скопировать в буфер</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
 function getCategoryName(key) {
     const categories = {
         study: 'Учеба',
@@ -746,13 +780,19 @@ if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();
     window.Telegram.WebApp.expand();
     userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
+    console.log('Telegram WebApp detected, userId:', userId);
     if (userId) {
-        loadTasks().then(() => renderApp());
+        loadTasks().then(() => {
+            console.log('Tasks loaded from server');
+            renderApp();
+        });
     } else {
+        console.log('No userId, loading from localStorage');
         tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
         renderApp();
     }
 } else {
+    console.log('Not in Telegram WebApp, loading from localStorage');
     tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
     renderApp();
 }
