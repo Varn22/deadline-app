@@ -5,8 +5,6 @@ let currentView = 'tasks'; // 'tasks', 'calendar', 'profile'
 let tasks = {};
 let currentTheme = localStorage.getItem('theme') || 'dark';
 let userId = null;
-// Prevent duplicate listeners
-let bound = { global: false, tasks: false, calendar: false, profile: false };
 // UI state
 let searchQuery = '';
 let notifications = [];
@@ -104,10 +102,10 @@ function renderApp() {
     app.innerHTML = html;
 
     // Setup events based on view
-    if (!bound.global) { setupGlobalEvents(); bound.global = true; }
-    if (currentView === 'tasks' && !bound.tasks) { setupTasksEvents(); bound.tasks = true; }
-    if (currentView === 'calendar' && !bound.calendar) { setupCalendarEvents(); bound.calendar = true; }
-    if (currentView === 'profile' && !bound.profile) { setupProfileEvents(); bound.profile = true; }
+    setupGlobalEvents();
+    if (currentView === 'tasks') setupTasksEvents();
+    if (currentView === 'calendar') setupCalendarEvents();
+    if (currentView === 'profile') setupProfileEvents();
 }
 
 function setupGlobalEvents() {
@@ -131,7 +129,11 @@ function handleNavClick(e) {
 }
 
 function handleModalClose(e) {
-    if (e.target.classList.contains('close') || e.target.classList.contains('modal')) {
+    if ((e.target.classList.contains('close') || e.target.classList.contains('modal')) && 
+        !e.target.closest('button') && 
+        !e.target.closest('input') && 
+        !e.target.closest('select') && 
+        !e.target.closest('textarea')) {
         e.target.closest('.modal').style.display = 'none';
     }
 }
@@ -578,7 +580,7 @@ function handleCalendarDayClick(e) {
         e.preventDefault();
     }
     
-    if (e.target.classList.contains('day') && currentView === 'calendar') {
+    if (e.target.classList.contains('day')) {
         const date = e.target.dataset.date;
         showCalendarTasks(date);
     }

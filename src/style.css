@@ -784,6 +784,12 @@ body.pixel .bottom-nav {
 }
 
 /* Calendar modal specific styles */
+#calendarModal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 #calendarModal .modal-content {
   max-height: 70vh;
 }
