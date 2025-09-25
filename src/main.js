@@ -109,6 +109,9 @@ function renderApp() {
 }
 
 function setupGlobalEvents() {
+    if (globalEventsBound) return;
+    globalEventsBound = true;
+    
     // Navigation
     document.addEventListener('click', handleNavClick);
     
@@ -416,7 +419,15 @@ function getStats() {
     return {total, completed, pending};
 }
 
+let globalEventsBound = false;
+let tasksEventsBound = false;
+let calendarEventsBound = false;
+let profileEventsBound = false;
+
 function setupTasksEvents() {
+    if (tasksEventsBound) return;
+    tasksEventsBound = true;
+
     // Add task button
     document.addEventListener('click', handleAddTask);
     // Save task
@@ -566,9 +577,12 @@ function handleFilterChange(e) {
 }
 
 function setupCalendarEvents() {
+    if (calendarEventsBound) return;
+    calendarEventsBound = true;
+    
     // Calendar day clicks
     document.addEventListener('click', handleCalendarDayClick);
-    document.addEventListener('touchend', handleCalendarDayClick);
+    document.addEventListener('touchend', handleCalendarDayClick, { passive: false });
     
     // Calendar navigation
     document.addEventListener('click', handleCalendarNavigation);
@@ -634,6 +648,9 @@ function showCalendarTasks(date) {
 }
 
 function setupProfileEvents() {
+    if (profileEventsBound) return;
+    profileEventsBound = true;
+
     // Theme toggle
     document.addEventListener('change', handleThemeToggle);
     
