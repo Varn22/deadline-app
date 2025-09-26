@@ -6,9 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "qa:api": "node qa/scripts/api-smoke.js",
+    "qa:ui": "playwright test",
+    "qa:all": "npm run qa:api && npm run qa:ui"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.2",
+    "@types/node": "^20.16.12",
     "vite": "^7.1.7"
   },
   "dependencies": {
