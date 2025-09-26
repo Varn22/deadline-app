@@ -9,6 +9,100 @@ let userId = null;
 let searchQuery = '';
 let notifications = [];
 let calendarDate = new Date(); // Current calendar view date
+const isTelegramWebApp = typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp;
+const isMobileDevice = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+let filterState = {
+    priority: '',
+    category: '',
+    starred: '',
+    sortBy: 'date'
+};
+
+const TASKS_STORAGE_KEY = 'tasks';
+const CATEGORY_ICONS = {
+    study: '📚',
+    work: '💼',
+    personal: '🏠',
+    other: '📌'
+};
+const PRIORITY_LABELS = {
+    high: '🔴 Высокий',
+    medium: '🟡 Средний',
+    low: '🟢 Низкий'
+};
+
+let renderQueued = false;
+let tasksRevision = 0;
+const upcomingTasksCache = {
+    signature: '',
+    data: []
+};
+
+function readTasksFromStorage() {
+    if (typeof localStorage === 'undefined') return {};
+    try {
+        const raw = localStorage.getItem(TASKS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch (error) {
+        console.warn('Cannot read tasks from storage:', error);
+        return {};
+    }
+}
+
+function persistTasksToStorage() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    } catch (error) {
+        console.warn('Cannot persist tasks to storage:', error);
+    }
+}
+
+function cleanEmptyDates() {
+    Object.keys(tasks).forEach(dateKey => {
+        if (!Array.isArray(tasks[dateKey]) || tasks[dateKey].length === 0) {
+            delete tasks[dateKey];
+        }
+    });
+}
+
+function mergeTaskCollections(primary = {}, secondary = {}) {
+    const merged = {};
+    const allDates = new Set([...Object.keys(primary), ...Object.keys(secondary)]);
+
+    allDates.forEach(dateKey => {
+        const primaryTasks = Array.isArray(primary[dateKey]) ? primary[dateKey] : [];
+        const secondaryTasks = Array.isArray(secondary[dateKey]) ? secondary[dateKey] : [];
+        const seen = new Set();
+        const combined = [];
+
+        primaryTasks.forEach(task => {
+            const identifier = task?.created || `${task?.text || ''}-${task?.category || ''}-${task?.priority || ''}`;
+            seen.add(identifier);
+            combined.push(task);
+        });
+
+        secondaryTasks.forEach(task => {
+            const identifier = task?.created || `${task?.text || ''}-${task?.category || ''}-${task?.priority || ''}`;
+            if (!seen.has(identifier)) {
+                seen.add(identifier);
+                combined.push(task);
+            }
+        });
+
+        if (combined.length > 0) {
+            merged[dateKey] = combined;
+        }
+    });
+
+    return merged;
+}
+
+function bumpTasksRevision() {
+    tasksRevision += 1;
+    upcomingTasksCache.signature = '';
+    upcomingTasksCache.data = [];
+}
 
 // Notification system
 function showNotification(message, type = 'info') {
@@ -31,42 +125,76 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-const API_BASE = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3001/api' 
-  : 'https://deadline-backend-d18n.onrender.com/api';
+const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:3001/api'
+    : '/api';
 
 async function loadTasks() {
-  if (!userId) return;
-  try {
-    const response = await fetch(`${API_BASE}/tasks/${userId}`);
-    if (response.ok) {
-      tasks = await response.json();
+    const localSnapshot = readTasksFromStorage();
+
+    if (!userId) {
+        tasks = localSnapshot;
+        cleanEmptyDates();
+        persistTasksToStorage();
+        bumpTasksRevision();
+        return tasks;
     }
-  } catch (error) {
-    console.error('Error loading tasks:', error);
-    tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-  }
+
+    try {
+        const response = await fetch(`${API_BASE}/tasks/${userId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to load tasks: ${response.status}`);
+        }
+        const serverTasks = await response.json();
+        tasks = mergeTaskCollections(serverTasks, localSnapshot);
+    } catch (error) {
+        console.error('Error loading tasks:', error);
+        tasks = localSnapshot;
+    }
+
+    cleanEmptyDates();
+    persistTasksToStorage();
+    bumpTasksRevision();
+    return tasks;
 }
 
 async function saveTasks(date) {
-  if (!userId) {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-    return;
-  }
-  try {
-    await fetch(`${API_BASE}/tasks/${userId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, tasks: tasks[date] || [] }),
-    });
-  } catch (error) {
-    console.error('Error saving tasks:', error);
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }
+    cleanEmptyDates();
+    persistTasksToStorage();
+
+    if (!userId || !date) {
+        return;
+    }
+
+    try {
+        await fetch(`${API_BASE}/tasks/${userId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, tasks: tasks[date] || [] })
+        });
+    } catch (error) {
+        console.error('Error saving tasks:', error);
+    }
 }
 
 function applyTheme() {
     document.body.className = currentTheme;
+}
+
+function requestRender(immediate = false) {
+    if (immediate) {
+        renderQueued = false;
+        renderApp();
+        return;
+    }
+
+    if (renderQueued) return;
+    renderQueued = true;
+    const schedule = (typeof window !== 'undefined' && window.requestAnimationFrame) || (cb => setTimeout(cb, 16));
+    schedule(() => {
+        renderQueued = false;
+        renderApp();
+    });
 }
 
 function renderApp() {
@@ -117,6 +245,25 @@ function setupGlobalEvents() {
     
     // Modal close
     document.addEventListener('click', handleModalClose);
+
+    // Immediate button feedback
+    document.addEventListener('pointerdown', handleButtonPointerDown, { passive: true });
+    document.addEventListener('pointerup', handleButtonPointerReset);
+    document.addEventListener('pointercancel', handleButtonPointerReset);
+}
+
+function handleButtonPointerDown(e) {
+    const button = e.target.closest('button');
+    if (!button) return;
+    button.classList.add('is-pressed');
+}
+
+function handleButtonPointerReset(e) {
+    const targetButton = e && e.target && e.target.closest ? e.target.closest('button') : null;
+    if (targetButton) {
+        targetButton.classList.remove('is-pressed');
+    }
+    document.querySelectorAll('button.is-pressed').forEach(btn => btn.classList.remove('is-pressed'));
 }
 
 function handleNavClick(e) {
@@ -126,28 +273,52 @@ function handleNavClick(e) {
         const view = navItem.dataset.view;
         if (view && view !== currentView) {
             currentView = view;
-            renderApp();
+            requestRender(true);
         }
     }
 }
 
 function handleModalClose(e) {
-    if ((e.target.classList.contains('close') || e.target.classList.contains('modal')) && 
-        !e.target.closest('button') && 
-        !e.target.closest('input') && 
-        !e.target.closest('select') && 
-        !e.target.closest('textarea')) {
-        e.target.closest('.modal').style.display = 'none';
+    const closeTrigger = e.target.closest('[data-modal-close]');
+    if (closeTrigger) {
+        closeModal(closeTrigger.closest('.modal'));
+        return;
+    }
+
+    if (e.target.classList && e.target.classList.contains('modal')) {
+        closeModal(e.target);
+    }
+}
+
+function closeModal(modal) {
+    if (!modal) return;
+    modal.style.display = 'none';
+    if (modal.id === 'taskModal') {
+        const saveBtn = modal.querySelector('#saveTask');
+        if (saveBtn) {
+            saveBtn.textContent = 'Сохранить задачу';
+            saveBtn.dataset.edit = '';
+            saveBtn.dataset.date = '';
+            saveBtn.dataset.index = '';
+        }
+        const taskInput = modal.querySelector('#newTask');
+        if (taskInput) taskInput.value = '';
+        const dateInput = modal.querySelector('#taskDate');
+        if (dateInput) dateInput.value = '';
+        const title = modal.querySelector('#taskModalTitle');
+        if (title) title.textContent = 'Новая задача';
+    }
+
+    if (!modal.id) {
+        modal.remove();
     }
 }
 
 function renderTasksView() {
     const today = new Date().toISOString().split('T')[0];
-    const prFilter = document.getElementById('filterPriority')?.value || '';
-    const catFilter = document.getElementById('filterCategory')?.value || '';
-    const starFilter = document.getElementById('filterStarred')?.value || '';
+    const { priority: prFilter, category: catFilter, starred: starFilter, sortBy } = filterState;
     const query = searchQuery.toLowerCase();
-    
+
     const todayTasks = (tasks[today] || []).filter(task => {
         if (task.completed) return false;
         if (prFilter && task.priority !== prFilter) return false;
@@ -156,100 +327,89 @@ function renderTasksView() {
         if (query && !task.text.toLowerCase().includes(query)) return false;
         return true;
     });
+
     const upcomingTasks = getUpcomingTasks();
+    const safeSearchValue = escapeHtml(searchQuery);
+
+    const todayMarkup = todayTasks.length > 0
+        ? todayTasks.map((task, index) => renderTaskCard({ date: today, task, index, isToday: true })).join('')
+        : '<p class="empty-state">Нет задач на сегодня</p>';
+
+    const upcomingMarkup = upcomingTasks.length > 0
+        ? upcomingTasks.map(({ date, task, index }) => renderTaskCard({ date, task, index, isToday: date === today })).join('')
+        : '<p class="empty-state">Нет предстоящих задач</p>';
 
     return `
         <header class="app-header">
             <h1>Задачи</h1>
-            <button class="add-task-btn" id="addTaskBtn">+</button>
+            <button class="add-task-btn" id="addTaskBtn" type="button" aria-label="Добавить задачу">+</button>
         </header>
-        
+
         <div class="content">
             <div class="filters">
-                <div>
-                    <label>🔍 Поиск</label>
-                    <input id="searchInput" type="text" placeholder="Введите текст задачи..." value="${searchQuery}" />
+                <div class="filter-search">
+                    <label for="searchInput">🔍 Поиск</label>
+                    <div class="search-input">
+                        <input id="searchInput" type="text" placeholder="Введите текст задачи..." value="${safeSearchValue}" autocomplete="off" aria-label="Поиск по задачам" />
+                        ${searchQuery ? '<button type="button" id="clearSearch" class="btn-icon search-clear" aria-label="Очистить поиск">✕</button>' : ''}
+                    </div>
                 </div>
                 <div>
-                    <label>⚡ Приоритет</label>
+                    <label for="filterPriority">⚡ Приоритет</label>
                     <select id="filterPriority">
-                        <option value="">Все приоритеты</option>
-                        <option value="high">🔴 Высокий</option>
-                        <option value="medium">🟡 Средний</option>
-                        <option value="low">🟢 Низкий</option>
+                        <option value="" ${prFilter === '' ? 'selected' : ''}>Все приоритеты</option>
+                        <option value="high" ${prFilter === 'high' ? 'selected' : ''}>🔴 Высокий</option>
+                        <option value="medium" ${prFilter === 'medium' ? 'selected' : ''}>🟡 Средний</option>
+                        <option value="low" ${prFilter === 'low' ? 'selected' : ''}>🟢 Низкий</option>
                     </select>
                 </div>
                 <div>
-                    <label>📂 Категория</label>
+                    <label for="filterCategory">📂 Категория</label>
                     <select id="filterCategory">
-                        <option value="">Все категории</option>
-                        <option value="study">📚 Учеба</option>
-                        <option value="work">💼 Работа</option>
-                        <option value="personal">🏠 Личное</option>
-                        <option value="other">📌 Другое</option>
+                        <option value="" ${catFilter === '' ? 'selected' : ''}>Все категории</option>
+                        <option value="study" ${catFilter === 'study' ? 'selected' : ''}>📚 Учеба</option>
+                        <option value="work" ${catFilter === 'work' ? 'selected' : ''}>💼 Работа</option>
+                        <option value="personal" ${catFilter === 'personal' ? 'selected' : ''}>🏠 Личное</option>
+                        <option value="other" ${catFilter === 'other' ? 'selected' : ''}>📌 Другое</option>
                     </select>
                 </div>
                 <div>
-                    <label>📊 Сортировка</label>
+                    <label for="sortBy">📊 Сортировка</label>
                     <select id="sortBy">
-                        <option value="date">По дате</option>
-                        <option value="priority">По приоритету</option>
-                        <option value="category">По категории</option>
-                        <option value="text">По алфавиту</option>
+                        <option value="date" ${sortBy === 'date' ? 'selected' : ''}>По дате</option>
+                        <option value="priority" ${sortBy === 'priority' ? 'selected' : ''}>По приоритету</option>
+                        <option value="category" ${sortBy === 'category' ? 'selected' : ''}>По категории</option>
+                        <option value="text" ${sortBy === 'text' ? 'selected' : ''}>По алфавиту</option>
                     </select>
                 </div>
                 <div>
-                    <label>⭐ Избранные</label>
+                    <label for="filterStarred">⭐ Избранные</label>
                     <select id="filterStarred">
-                        <option value="">Все задачи</option>
-                        <option value="starred">Только избранные</option>
+                        <option value="" ${starFilter === '' ? 'selected' : ''}>Все задачи</option>
+                        <option value="starred" ${starFilter === 'starred' ? 'selected' : ''}>Только избранные</option>
                     </select>
+                </div>
+                <div class="filters-actions">
+                    <button type="button" id="resetFilters" class="btn-secondary">Сбросить фильтры</button>
                 </div>
             </div>
             ${renderProgress()}
             <section class="today-deadline">
                 <h2>Дедлайн сегодня</h2>
-                ${todayTasks.length > 0 ? todayTasks.map((task, index) => `
-                    <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
-                        <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${today}" data-index="${index}">
-                        <div class="task-info">
-                            <span class="task-title">${task.text}</span>
-                            <span class="task-category">${getCategoryName(task.category || 'other')}</span>
-                            <div class="task-actions">
-                                <button class="btn-icon" data-action="star" data-date="${today}" data-index="${index}">${task.starred ? '⭐' : '☆'}</button>
-                                <button class="btn-icon" data-action="edit" data-date="${today}" data-index="${index}">✏️</button>
-                                <button class="btn-icon" data-action="delete" data-date="${today}" data-index="${index}">🗑️</button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('') : '<p style="text-align: center; color: var(--muted-text); padding: 20px;">Нет задач на сегодня</p>'}
+                ${todayMarkup}
             </section>
-            
+
             <section class="upcoming">
                 <h2>Предстоящие</h2>
-                ${upcomingTasks.map(({date, task, index}) => `
-                    <div class="task-card ${task.completed ? 'completed' : ''} ${task.priority ? task.priority + '-priority' : ''}">
-                        <input type="checkbox" ${task.completed ? 'checked' : ''} data-date="${date}" data-index="${index}">
-                        <div class="task-info">
-                            <span class="task-title">${task.text}</span>
-                            <span class="task-date">${new Date(date).toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                            <span class="task-category">${getCategoryName(task.category || 'other')}</span>
-                            <div class="task-actions">
-                                <button class="btn-icon" data-action="star" data-date="${date}" data-index="${index}">${task.starred ? '⭐' : '☆'}</button>
-                                <button class="btn-icon" data-action="edit" data-date="${date}" data-index="${index}">✏️</button>
-                                <button class="btn-icon" data-action="delete" data-date="${date}" data-index="${index}">🗑️</button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}
+                ${upcomingMarkup}
             </section>
         </div>
-        
+
         <div id="taskModal" class="modal" style="display: none;">
             <div class="modal-content">
-                <span class="close">&times;</span>
-                <h3>Новая задача</h3>
-                <input type="text" id="newTask" placeholder="Название задачи">
+                <button type="button" class="close" aria-label="Закрыть" data-modal-close>&times;</button>
+                <h3 id="taskModalTitle">Новая задача</h3>
+                <input type="text" id="newTask" placeholder="Название задачи" autocomplete="off">
                 <input type="date" id="taskDate" required>
                 <select id="taskCategory">
                     <option value="study">Учеба</option>
@@ -259,10 +419,13 @@ function renderTasksView() {
                 </select>
                 <select id="taskPriority">
                     <option value="low">Низкий</option>
-                    <option value="medium">Средний</option>
+                    <option value="medium" selected>Средний</option>
                     <option value="high">Высокий</option>
                 </select>
-                <button id="saveTask">Сохранить задачу</button>
+                <div class="modal-actions">
+                    <button type="button" id="cancelTask" class="btn-secondary" data-modal-close>Отмена</button>
+                    <button type="button" id="saveTask" class="btn-primary">Сохранить задачу</button>
+                </div>
             </div>
         </div>
     `;
@@ -306,7 +469,7 @@ function renderCalendarView() {
         </div>
         <div id="calendarModal" class="modal" style="display: none;">
             <div class="modal-content">
-                <span class="close">&times;</span>
+                <button type="button" class="close" aria-label="Закрыть" data-modal-close>&times;</button>
                 <h3 id="calendarModalDate"></h3>
                 <ul id="calendarTaskList"></ul>
             </div>
@@ -365,14 +528,74 @@ function renderProgress() {
     `;
 }
 
+function renderTaskCard({ date, task, index, isToday }) {
+    const priorityKey = task?.priority || 'medium';
+    const categoryKey = task?.category || 'other';
+    const safeText = escapeHtml(task?.text || '');
+    const priorityLabel = escapeHtml(getPriorityLabel(priorityKey));
+    const categoryLabel = escapeHtml(getCategoryLabel(categoryKey));
+    const dueDateChip = !isToday ? `<span class="task-chip task-chip-date">${escapeHtml(formatTaskDate(date))}</span>` : '';
+    const chips = `
+        ${dueDateChip}
+        <span class="task-chip task-chip-category">${categoryLabel}</span>
+        <span class="task-chip task-chip-priority task-chip-priority-${priorityKey}">${priorityLabel}</span>
+    `;
+    const cardClasses = [task?.completed ? 'completed' : '', priorityKey ? `${priorityKey}-priority` : '']
+        .filter(Boolean)
+        .join(' ');
+    const starred = Boolean(task?.starred);
+
+    return `
+        <div class="task-card ${cardClasses}">
+            <input type="checkbox" ${task?.completed ? 'checked' : ''} data-date="${date}" data-index="${index}" aria-label="Отметить задачу выполненной">
+            <div class="task-info">
+                <div class="task-header">
+                    <span class="task-title">${safeText}</span>
+                    <div class="task-actions">
+                        <button class="btn-icon" data-action="star" data-date="${date}" data-index="${index}" aria-pressed="${starred ? 'true' : 'false'}" aria-label="${starred ? 'Убрать задачу из избранного' : 'Добавить задачу в избранное'}">${starred ? '⭐' : '☆'}</button>
+                        <button class="btn-icon" data-action="edit" data-date="${date}" data-index="${index}" aria-label="Редактировать задачу">✏️</button>
+                        <button class="btn-icon" data-action="delete" data-date="${date}" data-index="${index}" aria-label="Удалить задачу">🗑️</button>
+                    </div>
+                </div>
+                <div class="task-meta">
+                    ${chips}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function formatTaskDate(date) {
+    if (!date) return '';
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleDateString('ru-RU', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+    });
+}
+
+function getPriorityLabel(priority) {
+    return PRIORITY_LABELS[priority] || PRIORITY_LABELS.medium;
+}
+
+function getCategoryLabel(key) {
+    const name = getCategoryName(key);
+    const icon = CATEGORY_ICONS[key] || CATEGORY_ICONS.other;
+    return `${icon} ${name}`.trim();
+}
+
 function getUpcomingTasks() {
     const today = new Date();
-    const upcoming = [];
-    const prFilter = document.getElementById('filterPriority')?.value || '';
-    const catFilter = document.getElementById('filterCategory')?.value || '';
-    const starFilter = document.getElementById('filterStarred')?.value || '';
-    const sortBy = document.getElementById('sortBy')?.value || 'date';
+    const { priority: prFilter, category: catFilter, starred: starFilter, sortBy } = filterState;
     const query = searchQuery.toLowerCase();
+    const todaySignature = today.toISOString().split('T')[0];
+    const signature = [tasksRevision, prFilter, catFilter, starFilter, sortBy, query, todaySignature].join('|');
+
+    if (upcomingTasksCache.signature === signature) {
+        return upcomingTasksCache.data;
+    }
     
     // Collect all tasks
     const allTasks = [];
@@ -382,6 +605,7 @@ function getUpcomingTasks() {
                 if (task.completed) return;
                 if (prFilter && task.priority !== prFilter) return;
                 if (catFilter && task.category !== catFilter) return;
+                if (starFilter === 'starred' && !task.starred) return;
                 if (query && !task.text.toLowerCase().includes(query)) return;
                 allTasks.push({ date, task, index });
             });
@@ -404,7 +628,10 @@ function getUpcomingTasks() {
         }
     });
     
-    return allTasks.slice(0, 10); // Show more tasks
+    const result = allTasks.slice(0, 10);
+    upcomingTasksCache.signature = signature;
+    upcomingTasksCache.data = result;
+    return result;
 }
 
 function getStats() {
@@ -437,6 +664,8 @@ function setupTasksEvents() {
     // Filters
     document.addEventListener('input', handleSearchInput);
     document.addEventListener('change', handleFiltersChange);
+    document.addEventListener('click', handleResetFilters);
+    document.addEventListener('click', handleClearSearch);
     // Edit/Delete actions
     document.addEventListener('click', handleTaskActionButtons);
 }
@@ -444,27 +673,39 @@ function setupTasksEvents() {
 function handleTaskActionButtons(e) {
     const btn = e.target.closest('.btn-icon');
     if (!btn) return;
+
     const action = btn.dataset.action;
+    if (!action) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    btn.blur();
+    handleButtonPointerReset();
+
     const date = btn.dataset.date;
     const index = Number(btn.dataset.index);
     if (!tasks[date]) return;
 
     if (action === 'delete') {
         tasks[date].splice(index, 1);
+        bumpTasksRevision();
         saveTasks(date);
-        renderApp();
+        requestRender();
     }
 
     if (action === 'edit') {
         const task = tasks[date][index];
-        document.getElementById('taskModal').style.display = 'block';
+        const modal = document.getElementById('taskModal');
+        modal.style.display = 'flex';
         document.getElementById('newTask').value = task.text;
         document.getElementById('taskDate').value = date;
         document.getElementById('taskCategory').value = task.category;
         document.getElementById('taskPriority').value = task.priority;
+        const title = document.getElementById('taskModalTitle');
+        if (title) title.textContent = 'Редактирование задачи';
         // Override save for edit
         const saveBtn = document.getElementById('saveTask');
-        saveBtn.textContent = 'Сохранить';
+        saveBtn.textContent = 'Сохранить изменения';
         saveBtn.dataset.edit = 'true';
         saveBtn.dataset.date = date;
         saveBtn.dataset.index = index;
@@ -472,21 +713,51 @@ function handleTaskActionButtons(e) {
 
     if (action === 'star') {
         tasks[date][index].starred = !tasks[date][index].starred;
+        bumpTasksRevision();
         saveTasks(date);
-        renderApp();
+        requestRender();
     }
 }
 
 function handleSearchInput(e) {
     if (e.target.id === 'searchInput') {
         searchQuery = e.target.value;
-        renderApp();
+        requestRender();
+    }
+}
+
+function handleClearSearch(e) {
+    if (e.target && e.target.id === 'clearSearch') {
+        e.preventDefault();
+        e.stopPropagation();
+        searchQuery = '';
+        handleButtonPointerReset(e);
+        requestRender();
     }
 }
 
 function handleFiltersChange(e) {
-    if (e.target.id === 'filterPriority' || e.target.id === 'filterCategory' || e.target.id === 'sortBy' || e.target.id === 'filterStarred') {
-        renderApp();
+    if (e.target.id === 'filterPriority') {
+        filterState.priority = e.target.value;
+        requestRender();
+    } else if (e.target.id === 'filterCategory') {
+        filterState.category = e.target.value;
+        requestRender();
+    } else if (e.target.id === 'sortBy') {
+        filterState.sortBy = e.target.value || 'date';
+        requestRender();
+    } else if (e.target.id === 'filterStarred') {
+        filterState.starred = e.target.value;
+        requestRender();
+    }
+}
+
+function handleResetFilters(e) {
+    if (e.target && e.target.id === 'resetFilters') {
+        filterState = { priority: '', category: '', starred: '', sortBy: 'date' };
+        searchQuery = '';
+        requestRender();
+        showNotification('⚙️ Фильтры сброшены', 'info');
     }
 }
 
@@ -500,7 +771,16 @@ function handleAddTask(e) {
             const d = pad(now.getDate());
             dateInput.value = `${y}-${m}-${d}`;
         }
-        document.getElementById('taskModal').style.display = 'block';
+        const saveBtn = document.getElementById('saveTask');
+        if (saveBtn) {
+            saveBtn.textContent = 'Сохранить задачу';
+            saveBtn.dataset.edit = '';
+            saveBtn.dataset.date = '';
+            saveBtn.dataset.index = '';
+        }
+        const title = document.getElementById('taskModalTitle');
+        if (title) title.textContent = 'Новая задача';
+        document.getElementById('taskModal').style.display = 'flex';
     }
 }
 
@@ -511,6 +791,7 @@ function handleSaveTask(e) {
         const category = document.getElementById('taskCategory').value;
         const priority = document.getElementById('taskPriority').value;
         let taskText = taskInput.value.trim();
+        let dataChanged = false;
 
         // Parse date from text (always try, even if date field is filled)
         const parsedDate = parseDateFromText(taskText);
@@ -535,24 +816,31 @@ function handleSaveTask(e) {
                 tasks[date].push({ text: taskText, completed: task.completed, category, priority, starred: task.starred, created: task.created });
                 saveTasks(oldDate);
                 saveTasks(date);
+                dataChanged = true;
             } else {
                 task.text = taskText;
                 task.category = category;
                 task.priority = priority;
                 saveTasks(date);
+                dataChanged = true;
             }
         } else {
             if (!tasks[date]) tasks[date] = [];
             tasks[date].push({ text: taskText, completed: false, category, priority, starred: false, created: new Date().toISOString() });
             saveTasks(date);
+            dataChanged = true;
+        }
+
+        if (dataChanged) {
+            bumpTasksRevision();
         }
 
         // Reset and close
         e.target.textContent = 'Сохранить задачу';
         e.target.dataset.edit = '';
         document.getElementById('newTask').value = '';
-        document.getElementById('taskModal').style.display = 'none';
-        renderApp();
+        closeModal(document.getElementById('taskModal'));
+        requestRender(true);
     }
 }
 
@@ -562,18 +850,19 @@ function handleTaskCheckbox(e) {
         const date = checkbox.dataset.date;
         const index = checkbox.dataset.index;
         tasks[date][index].completed = checkbox.checked;
+        bumpTasksRevision();
         saveTasks(date);
-        renderApp();
+        requestRender();
     }
 }
 
 function handleSearch(e) {
     searchQuery = e.target.value.toLowerCase();
-    renderApp();
+    requestRender();
 }
 
 function handleFilterChange(e) {
-    renderApp();
+    requestRender();
 }
 
 function setupCalendarEvents() {
@@ -603,10 +892,10 @@ function handleCalendarDayClick(e) {
 function handleCalendarNavigation(e) {
     if (e.target.id === 'prevMonth') {
         calendarDate.setMonth(calendarDate.getMonth() - 1);
-        renderApp();
+        requestRender(true);
     } else if (e.target.id === 'nextMonth') {
         calendarDate.setMonth(calendarDate.getMonth() + 1);
-        renderApp();
+        requestRender(true);
     }
 }
 
@@ -629,22 +918,23 @@ function showCalendarTasks(date) {
             const li = document.createElement('li');
             li.innerHTML = `
                 <input type="checkbox" ${task.completed ? 'checked' : ''} data-index="${index}">
-                <span>${task.text}</span>
-                <small>${getCategoryName(task.category)} • ${task.priority === 'high' ? 'Высокий' : task.priority === 'medium' ? 'Средний' : 'Низкий'}</small>
+                <span>${escapeHtml(task.text)}</span>
+                <small>${escapeHtml(getCategoryLabel(task.category || 'other'))} • ${escapeHtml(getPriorityLabel(task.priority || 'medium'))}</small>
             `;
             li.querySelector('input').addEventListener('change', () => {
                 task.completed = li.querySelector('input').checked;
+                bumpTasksRevision();
                 saveTasks(date);
                 showCalendarTasks(date);
-                renderApp();
+                requestRender();
             });
             taskList.appendChild(li);
         });
     } else {
-        taskList.innerHTML = '<li style="text-align: center; color: var(--text-muted);">Нет задач на эту дату</li>';
+        taskList.innerHTML = '<li style="text-align: center; color: var(--text-muted); padding: 12px 0;">Нет задач на эту дату</li>';
     }
 
-    modal.style.display = 'block';
+    modal.style.display = 'flex';
 }
 
 function setupProfileEvents() {
@@ -662,6 +952,9 @@ function setupProfileEvents() {
     
     // Import file change
     document.addEventListener('change', handleImportFile);
+
+    // Export modal copy
+    document.addEventListener('click', handleExportModalCopy);
 }
 
 function handleThemeToggle(e) {
@@ -672,42 +965,85 @@ function handleThemeToggle(e) {
     }
 }
 
-function handleExport(e) {
+async function handleExport(e) {
     if (e.target.id === 'exportBtn') {
         try {
             const dataStr = JSON.stringify(tasks, null, 2);
-            
-            // Try to download file
+            if ((isMobileDevice || isTelegramWebApp) && navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Резервная копия задач',
+                        text: dataStr
+                    });
+                    showNotification('✅ Поделились резервной копией!', 'success');
+                    return;
+                } catch (shareError) {
+                    // если пользователь отменил шаринг, просто переходим к следующим вариантам
+                }
+            }
+
+            if (isTelegramWebApp || isMobileDevice) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    try {
+                        await navigator.clipboard.writeText(dataStr);
+                        showNotification('✅ Данные скопированы в буфер обмена!', 'success');
+                        return;
+                    } catch (clipboardError) {
+                        console.warn('Clipboard export failed:', clipboardError);
+                    }
+                }
+                showExportModal(dataStr);
+                showNotification('⚠️ Скопируйте данные вручную из окна экспорта.', 'warning');
+                return;
+            }
+
             try {
                 const dataBlob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(dataBlob);
-                
+
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `tasks_backup_${new Date().toISOString().split('T')[0]}.json`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 URL.revokeObjectURL(url);
                 showNotification('✅ Задачи экспортированы в файл!', 'success');
             } catch (downloadError) {
-                // Fallback: copy to clipboard
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(dataStr).then(() => {
+                console.warn('File export failed:', downloadError);
+                if (navigator.clipboard && window.isSecureContext) {
+                    try {
+                        await navigator.clipboard.writeText(dataStr);
                         showNotification('✅ Данные скопированы в буфер обмена!', 'success');
-                    }).catch(() => {
-                        // Second fallback: show in modal
-                        showExportModal(dataStr);
-                    });
-                } else {
-                    // Fallback: show in modal
-                    showExportModal(dataStr);
+                        return;
+                    } catch (clipboardError) {
+                        console.warn('Clipboard export failed:', clipboardError);
+                    }
                 }
+                showExportModal(dataStr);
             }
         } catch (error) {
             console.error('Export error:', error);
             showNotification('❌ Ошибка при экспорте задач', 'error');
+        }
+    }
+}
+
+async function handleExportModalCopy(e) {
+    if (e.target && e.target.matches('[data-copy-export]')) {
+        const textArea = e.target.closest('.modal-content')?.querySelector('[data-export-text]');
+        if (!textArea) return;
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(textArea.value);
+                showNotification('✅ Скопировано!', 'success');
+            } else {
+                throw new Error('Clipboard API недоступен');
+            }
+        } catch (err) {
+            console.error('Copy failed:', err);
+            showNotification('❌ Не удалось скопировать автоматически. Выделите текст вручную.', 'error');
         }
     }
 }
@@ -726,15 +1062,17 @@ function handleImportFile(e) {
             reader.onload = async (e) => {
                 try {
                     const importedTasks = JSON.parse(e.target.result);
-                    tasks = importedTasks;
-                    localStorage.setItem('tasks', JSON.stringify(tasks));
+                    tasks = mergeTaskCollections(importedTasks, tasks);
+                    cleanEmptyDates();
+                    persistTasksToStorage();
+                    bumpTasksRevision();
                     // Save to backend if user is logged in
                     if (userId) {
-                        for (const date in tasks) {
+                        for (const date of Object.keys(tasks)) {
                             await saveTasks(date);
                         }
                     }
-                    renderApp();
+                    requestRender(true);
                     showNotification('✅ Задачи успешно импортированы!', 'success');
                 } catch (error) {
                     console.error('Import error:', error);
@@ -742,6 +1080,7 @@ function handleImportFile(e) {
                 }
             };
             reader.readAsText(file);
+            e.target.value = '';
         }
     }
 }
@@ -749,17 +1088,26 @@ function handleImportFile(e) {
 function showExportModal(dataStr) {
     const modal = document.createElement('div');
     modal.className = 'modal';
-    modal.style.display = 'block';
+    modal.style.display = 'flex';
     modal.innerHTML = `
         <div class="modal-content">
-            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <button type="button" class="close" aria-label="Закрыть" data-modal-close>&times;</button>
             <h3>Экспорт данных</h3>
             <p>Скопируйте данные ниже и сохраните их в файл:</p>
-            <textarea readonly style="width: 100%; height: 200px; margin: 10px 0; padding: 10px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); font-family: monospace; font-size: 12px;">${dataStr}</textarea>
-            <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => showNotification('✅ Скопировано!', 'success')).catch(() => showNotification('❌ Не удалось скопировать', 'error'))" style="width: 100%; padding: 12px; background: var(--accent-primary); color: white; border: none; border-radius: var(--radius-md); cursor: pointer;">Скопировать в буфер</button>
+            <textarea readonly data-export-text style="width: 100%; height: 200px; margin: 10px 0; padding: 10px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); font-family: monospace; font-size: 12px;">${dataStr}</textarea>
+            <button type="button" class="btn-secondary" data-copy-export>Скопировать в буфер</button>
         </div>
     `;
     document.body.appendChild(modal);
+}
+
+function escapeHtml(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function getCategoryName(key) {
@@ -797,23 +1145,30 @@ function parseDateFromText(text) {
 
 // Initialize
 applyTheme();
+const storedTasks = readTasksFromStorage();
+if (Object.keys(storedTasks).length > 0) {
+    tasks = storedTasks;
+    cleanEmptyDates();
+    bumpTasksRevision();
+}
+
 if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();
     window.Telegram.WebApp.expand();
     userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
     console.log('Telegram WebApp detected, userId:', userId);
+
+    renderApp();
+
     if (userId) {
         loadTasks().then(() => {
             console.log('Tasks loaded from server');
-            renderApp();
+            requestRender(true);
         });
     } else {
-        console.log('No userId, loading from localStorage');
-        tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-        renderApp();
+        console.log('No userId, using local tasks only');
     }
 } else {
-    console.log('Not in Telegram WebApp, loading from localStorage');
-    tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+    console.log('Standalone mode detected, using local tasks');
     renderApp();
 }

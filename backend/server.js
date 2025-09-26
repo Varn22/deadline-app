@@ -8,7 +8,13 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: ['https://deadline-app.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  origin: [
+    'https://deadline-app.vercel.app',
+    'https://deadline-frontend.hb.bizmrg.com',
+    'https://api.deadline.185-241-195-19.sslip.io',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
   credentials: true
 }));
 app.use(express.json());
