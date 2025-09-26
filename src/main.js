@@ -125,9 +125,31 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001/api'
-    : '/api';
+const API_BASE = (() => {
+    if (typeof window === 'undefined') {
+        return '/api';
+    }
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3001/api';
+    }
+
+    const explicitHosts = {
+        'deadline-frontend.hb.bizmrg.com': 'https://api.deadline.185-241-195-19.sslip.io/api',
+        'deadline-app.vercel.app': 'https://api.deadline.185-241-195-19.sslip.io/api',
+        'deadline-app-git-main-varn22.vercel.app': 'https://api.deadline.185-241-195-19.sslip.io/api'
+    };
+
+    if (explicitHosts[hostname]) {
+        return explicitHosts[hostname];
+    }
+
+    if (hostname.endsWith('.hb.bizmrg.com') || hostname.endsWith('.vercel.app')) {
+        return 'https://api.deadline.185-241-195-19.sslip.io/api';
+    }
+
+    return '/api';
+})();
 
 async function loadTasks() {
     const localSnapshot = readTasksFromStorage();

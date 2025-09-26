@@ -63,16 +63,17 @@ const taskSchema = new mongoose.Schema({
 
 const Task = mongoose.model('Task', taskSchema);
 
-// Routes
-app.get('/api', (req, res) => {
+const apiRouter = express.Router();
+
+apiRouter.get('/', (req, res) => {
   res.json({ message: 'Deadline Backend API is running', version: '1.0.0' });
 });
 
-app.get('/api/health', (req, res) => {
+apiRouter.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/test', (req, res) => {
+apiRouter.get('/test', (req, res) => {
   res.json({ 
     message: 'Backend is working!', 
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
@@ -80,7 +81,7 @@ app.get('/api/test', (req, res) => {
   });
 });
 
-app.get('/api/tasks/:userId', async (req, res) => {
+apiRouter.get('/tasks/:userId', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
       // Development mode without MongoDB
@@ -100,7 +101,7 @@ app.get('/api/tasks/:userId', async (req, res) => {
   }
 });
 
-app.post('/api/tasks/:userId', async (req, res) => {
+apiRouter.post('/tasks/:userId', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
       // Development mode without MongoDB
@@ -121,7 +122,7 @@ app.post('/api/tasks/:userId', async (req, res) => {
   }
 });
 
-app.delete('/api/tasks/:userId/:date', async (req, res) => {
+apiRouter.delete('/tasks/:userId/:date', async (req, res) => {
   try {
     await Task.findOneAndDelete({ userId: req.params.userId, date: req.params.date });
     res.json({ success: true });
@@ -131,12 +132,15 @@ app.delete('/api/tasks/:userId/:date', async (req, res) => {
 });
 
 // Telegram Bot integration for reminders (simplified)
-app.post('/api/remind/:userId', async (req, res) => {
+apiRouter.post('/remind/:userId', async (req, res) => {
   // Here you would integrate with Telegram Bot API to send messages
   // For now, just log
   console.log(`Reminder for user ${req.params.userId}: ${req.body.message}`);
   res.json({ success: true });
 });
+
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // Error handling middleware
 app.use((error, req, res, next) => {
